@@ -40,12 +40,8 @@ import {
 } from "./aws-partition";
 import { getProfileSdkUaAppId, isSsoProfile } from "./aws-profiles";
 import { logger } from "./logger";
-import { loadModelsDevData as loadModelsDevelopmentData } from "./models-dev";
-import type {
-  AuthConfig,
-  BedrockModelSummary,
-  ModelsDevMap as ModelsDevelopmentMap,
-} from "./types";
+import { loadModelsDevelopmentData } from "./models-development";
+import type { AuthConfig, BedrockModelSummary, ModelsDevelopmentMap } from "./types";
 
 export class BedrockAPIClient {
   private authConfig?: AuthConfig;
@@ -329,7 +325,7 @@ export class BedrockAPIClient {
 
   /**
    * Load model metadata from the bundled models.dev cache.
-   * Delegates to `src/models-dev.ts` — see that module for details.
+   * Delegates to `src/models-development.ts` — see that module for details.
    *
    * The `_abortSignal` parameter is retained for call-site compatibility
    * (callers pass a signal they already have) but is unused because the

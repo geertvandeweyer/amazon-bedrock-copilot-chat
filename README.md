@@ -2,6 +2,8 @@
 
 A VSCode extension that brings Amazon Bedrock models into GitHub Copilot Chat using VSCode's official [Language Model Chat Provider API](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider) and the AWS SDK.
 
+\*\*This plugin was forked from [tinovyatkin](https://github.com/tinovyatkin/amazon-bedrock-copilot-chat) and extended to enhance performance and support newer models.
+
 **This is not a hack or workaround** - it's built on two official APIs:
 
 - VSCode's **Language Model Chat Provider API** for integrating custom models into Copilot Chat
@@ -35,6 +37,11 @@ A VSCode extension that brings Amazon Bedrock models into GitHub Copilot Chat us
 2. Configure your AWS credentials if you haven't already:
    - See [AWS CLI Configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html) for details
 3. Run the "Manage Amazon Bedrock Provider" command to select your AWS profile and region
+
+Alternatively, install from the `vsix` file:
+
+1. Download from [github](https://github.com/geertvandeweyer/amazon-bedrock-copilot-chat/releases/download/0.15.1/amazon-bedrock-copilot-chat-0.15.0.vsix)
+2. Open Plugins menu, select the `three dots` and select `Install from VSIX`
 
 ## Configuration
 
@@ -71,14 +78,15 @@ Once configured, Bedrock models will appear in GitHub Copilot Chat's model selec
 1. Open GitHub Copilot Chat
 2. Click on the model selector
 3. Choose a Bedrock model (they will be labeled with "Amazon Bedrock")
-4. Start chatting!
+4. Configure context & reasoning if supported by the model
+5. Start chatting!
 
 ## Supported Models
 
 The extension automatically filters and displays only models that:
 
 - Support **tool calling** (function calling), which is essential for GitHub Copilot Chat features like `@workspace`, `@terminal`, and other integrations
-- Are **enabled** in your Amazon Bedrock console (models must be authorized and available in your selected region)
+- Models are **not** filtered on your data retention policy, so calls high-end models might be rejected if `aws_review` policy is not set.
 
 ### Models Automatically Excluded
 
@@ -89,8 +97,6 @@ The extension automatically filters models to show only text generation models (
 - **Deprecated models** (models with `LEGACY` lifecycle status)
 
 Models are sorted with newest inference profiles first (by creation/update date), making it easier to find recently released models.
-
-**Note**: Some text models that appear in the list may have limited or no tool calling support (e.g., legacy Amazon Titan Text, AI21 Jurassic 2, Meta Llama 2 and 3.0). These will fail gracefully if tool calls are attempted.
 
 ## Troubleshooting
 

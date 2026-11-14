@@ -49,7 +49,7 @@ export interface ModelProfile {
    */
   supportsMaxEffort: boolean;
   /**
-   * Whether the model supports prompt caching via cache points
+   * Whether the model supports prompt caching via cache points.
    */
   supportsPromptCaching: boolean;
   /**
@@ -77,6 +77,10 @@ export interface ModelProfile {
    * Whether the model supports the toolChoice parameter
    */
   supportsToolChoice: boolean;
+  /**
+   * Whether the model accepts a cache point after tool definitions in toolConfig.
+   */
+  supportsToolDefinitionCaching?: boolean;
   /**
    * Whether the model supports the status field in tool results (error/success)
    * Reference: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultBlock.html
@@ -128,6 +132,7 @@ export function getModelProfile(modelId: string): ModelProfile {
     supportsThinking: false,
     supportsThinkingEffort: false,
     supportsToolChoice: false,
+    supportsToolDefinitionCaching: true,
     supportsToolResultStatus: false,
     temperatureDeprecated: false,
     toolResultFormat: "text",
@@ -179,6 +184,8 @@ export function getModelProfile(modelId: string): ModelProfile {
           supportsThinking: false,
           supportsThinkingEffort: false,
           supportsToolChoice: true,
+          // Bedrock Nova models reject cachePoint in toolConfig.tools.
+          supportsToolDefinitionCaching: false,
           supportsToolResultStatus: false,
           temperatureDeprecated: false,
           toolResultFormat: "text",

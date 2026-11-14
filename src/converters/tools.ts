@@ -13,9 +13,9 @@ import { convertSchema } from "./schema";
 export function convertTools(
   options: Parameters<LanguageModelChatProvider["provideLanguageModelChatResponse"]>[2],
   modelId: string,
-  extendedThinkingEnabled?: boolean,
-  promptCachingEnabled?: boolean,
-  toolCallSupported?: boolean,
+  isExtendedThinkingEnabled?: boolean,
+  isPromptCachingEnabled?: boolean,
+  isToolCallSupported?: boolean,
 ): bedrockRuntime.ToolConfiguration | undefined {
   if (!options.tools || options.tools.length === 0) {
     return undefined;
@@ -25,7 +25,7 @@ export function convertTools(
   // calls (e.g. derived from models.dev `tool_call: false` for a model not
   // yet enumerated in profiles.ts), skip the entire tool config so the
   // Bedrock API doesn't return a ValidationException.
-  if (toolCallSupported === false) {
+  if (isToolCallSupported === false) {
     logger.debug(`[Tool Converter] Skipping tools — model ${modelId} does not support tool calls`);
     return undefined;
   }
@@ -52,8 +52,13 @@ export function convertTools(
   // This is one of three strategic cache points: after system messages,
   // after tool definitions, and after tool results (within 4-point limit)
   // promptCachingEnabled defaults to true if not specified
-  const cachingEnabled = promptCachingEnabled ?? true;
-  if (profile.supportsPromptCaching && cachingEnabled && tools.length > 0) {
+  const isCachingEnabled = isPromptCachingEnabled ?? true;
+  if (
+    isCachingEnabled &&
+    profile.supportsToolDefinitionCaching !== false &&
+    profile.supportsPromptCaching &&
+    tools.length > 0
+  ) {
     tools.push({ cachePoint: { type: CachePointType.DEFAULT } });
   }
 
@@ -62,16 +67,16 @@ export function convertTools(
   // Add tool choice if supported by the model
   // CRITICAL: Cannot set tool_choice when extended thinking enabled
   // API error: "Thinking may not be enabled when tool_choice forces tool use"
-  if (profile.supportsToolChoice && options.toolMode !== undefined && !extendedThinkingEnabled) {
+  if (!isExtendedThinkingEnabled && profile.supportsToolChoice && options.toolMode !== undefined) {
     if (options.toolMode === LanguageModelChatToolMode.Required) {
       config.toolChoice = { any: {} } satisfies bedrockRuntime.AnyToolChoice;
     } else if (options.toolMode === LanguageModelChatToolMode.Auto) {
       config.toolChoice = { auto: {} } satisfies bedrockRuntime.AutoToolChoice;
     }
   } else if (
+    isExtendedThinkingEnabled &&
     profile.supportsToolChoice &&
-    options.toolMode !== undefined &&
-    extendedThinkingEnabled
+    options.toolMode !== undefined
   ) {
     logger.debug("[Tool Converter] Skipping tool_choice (incompatible with extended thinking)", {
       requestedMode: options.toolMode,

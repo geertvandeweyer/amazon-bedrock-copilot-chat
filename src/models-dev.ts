@@ -11,8 +11,8 @@
  */
 
 import { logger } from "./logger";
-import modelsDevCache from "./models-dev-cache.json";
-import type { ModelsDevEntry, ModelsDevMap } from "./types";
+import modelsDevelopmentCache from "./models-dev-cache.json";
+import type { ModelsDevelopmentEntry, ModelsDevelopmentMap } from "./types";
 
 /**
  * Load the bundled models.dev cache.
@@ -23,8 +23,8 @@ import type { ModelsDevEntry, ModelsDevMap } from "./types";
  *
  * To refresh: run `scripts/update-models-cache.sh` and commit the result.
  */
-export function loadModelsDevData(): ModelsDevMap {
-  const result = parseModelsDevData(modelsDevCache);
+export function loadModelsDevData(): ModelsDevelopmentMap {
+  const result = parseModelsDevelopmentData(modelsDevelopmentCache);
   logger.debug(`[models.dev] Loaded ${result.size} models from bundled cache`);
   return result;
 }
@@ -34,11 +34,11 @@ export function loadModelsDevData(): ModelsDevMap {
  * `amazon-bedrock` provider. Entries without valid `limit.context` /
  * `limit.output` numbers are silently skipped.
  */
-function parseModelsDevData(data: Record<string, unknown>): ModelsDevMap {
-  const result: ModelsDevMap = new Map();
+function parseModelsDevelopmentData(data: Record<string, unknown>): ModelsDevelopmentMap {
+  const result: ModelsDevelopmentMap = new Map();
   const bedrockProvider = data["amazon-bedrock"] as
     | undefined
-    | { models?: Record<string, ModelsDevEntry> };
+    | { models?: Record<string, ModelsDevelopmentEntry> };
 
   if (!bedrockProvider?.models) {
     logger.warn("[models.dev] Cache missing amazon-bedrock provider section");

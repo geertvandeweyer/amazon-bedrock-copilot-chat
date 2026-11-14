@@ -5,10 +5,15 @@ import * as vscode from "vscode";
 import { convertMessages, stripThinkingContent } from "../converters/messages";
 import { convertTools } from "../converters/tools";
 import { logger } from "../logger";
-import { loadModelsDevData as loadModelsDevelopmentData } from "../models-dev";
+import { filterDeprecatedFoundationModels, isDeprecatedModel } from "../model-lifecycle";
+import { loadModelsDevelopmentData } from "../models-development";
 import { getModelProfile, getModelTokenLimits, normalizeModelId } from "../profiles";
-import { BedrockChatModelProvider, getAccountDataRetentionGuidance } from "../provider";
-import type { BedrockModelSummary, ModelsDevMap as ModelsDevelopmentMap } from "../types";
+import {
+  BedrockChatModelProvider,
+  getAccountDataRetentionGuidance,
+  getModelDataRetentionWarning,
+} from "../provider";
+import type { BedrockModelSummary, ModelsDevelopmentMap } from "../types";
 
 interface ProviderInternals {
   applyReasoningEffort: (
@@ -48,8 +53,15 @@ interface ProviderInternals {
     reasoningEffort?: "high" | "low" | "medium" | "minimal",
     disabledThinkingType?: "adaptive" | "between_tools" | "disabled",
   ) => ConverseStreamCommandInput;
-  formatDetail: (modelId: string, maxInput: number, maxOutput: number, isVision: boolean) => string;
+  formatDetail: (
+    modelId: string,
+    maxInput: number,
+    maxOutput: number,
+    isVision: boolean,
+    cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number },
+  ) => string;
   formatTooltip: (arguments_: {
+    cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number };
     maxInput: number;
     maxOutput: number;
     modelId: string;
@@ -57,6 +69,10 @@ interface ProviderInternals {
     route: string;
     vision: boolean;
   }) => string;
+  getPickerPricingMetadata: (
+    isBYOK: boolean,
+    cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number },
+  ) => Record<string, boolean | number | string | undefined>;
   resolveModelLimits: (
     modelId: string,
     isContext1MEnabled: boolean,
@@ -267,6 +283,36 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
         new vscode.CancellationTokenSource().token,
       );
       assert.ok(Array.isArray(infos));
+    });
+
+    test("identifies deprecated models from models.dev metadata, including regional IDs", () => {
+      const modelsDevelopmentMap: ModelsDevelopmentMap = new Map([
+        ["nvidia.nemotron-nano-3-30b", { limit: { context: 262_144, output: 8192 } }],
+        [
+          "nvidia.nemotron-nano-9b-v2",
+          {
+            limit: { context: 131_072, output: 8192 },
+            status: "deprecated",
+          },
+        ],
+      ]);
+
+      assert.equal(isDeprecatedModel("nvidia.nemotron-nano-9b-v2", modelsDevelopmentMap), true);
+      assert.equal(
+        isDeprecatedModel("global.nvidia.nemotron-nano-9b-v2", modelsDevelopmentMap),
+        true,
+      );
+      assert.equal(isDeprecatedModel("nvidia.nemotron-nano-3-30b", modelsDevelopmentMap), false);
+      const models = [
+        createTestModel("nvidia.nemotron-nano-3-30b"),
+        createTestModel("nvidia.nemotron-nano-9b-v2"),
+      ];
+      assert.deepEqual(
+        filterDeprecatedFoundationModels(models, modelsDevelopmentMap).map(
+          (model) => model.modelId,
+        ),
+        ["nvidia.nemotron-nano-3-30b"],
+      );
     });
 
     test("provideTokenCount counts simple string", async () => {
@@ -640,8 +686,112 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       // detail should show total context (197K) and output (98K)
       assert.match(detail, /^197K ctx · 98K out/);
       // tooltip should show total context 197K, not the inflated 295K
-      assert.match(tooltip, /Context: 197K tokens \| Max output: 98K tokens/);
+      assert.match(tooltip, /Context: 197K tokens/);
+      assert.match(tooltip, /Output: 98K tokens/);
       assert.doesNotMatch(tooltip, /295K tokens/);
+    });
+
+    test("shows indicative dollar prices and clarifies they are not Copilot credits", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const cost = { cache_read: 0.0825, cache_write: 0.33, input: 0.33, output: 2.75 };
+      const modelId = "amazon.nova-2-lite-v1:0";
+
+      const detail = provider.formatDetail(modelId, 934_465, 65_535, false, cost);
+      const pickerPricing = provider.getPickerPricingMetadata(true, cost);
+      const tooltip = provider.formatTooltip({
+        cost,
+        maxInput: 934_465,
+        maxOutput: 65_535,
+        modelId,
+        providerName: "Amazon",
+        route: "Direct foundation model",
+        vision: false,
+      });
+
+      assert.match(detail, /\$0\.33 in \/ \$2\.75 out/);
+      assert.equal(pickerPricing.inputCost, "$0.33");
+      assert.equal(pickerPricing.outputCost, "$2.75");
+      assert.equal(pickerPricing.cacheCost, "$0.0825");
+      assert.equal(pickerPricing.cacheWriteCost, "$0.33");
+      assert.equal(pickerPricing.isBYOK, true);
+      assert.equal(
+        pickerPricing.pricing,
+        "In: $0.33 / Out: $2.75\nPricing may vary based on AWS Region",
+      );
+      assert.deepEqual(provider.getPickerPricingMetadata(true, { input: 1 }), {});
+      assert.match(tooltip, /^\*\*Owner\*\* {2}\n(&nbsp;){4}Amazon$/m);
+      assert.doesNotMatch(tooltip, /Direct foundation model/);
+      assert.match(tooltip, /\*\*Pricing \(USD \/ 1M tokens\)\*\*/);
+      assert.match(tooltip, /In: \$0\.33/);
+      assert.match(tooltip, /Out: \$2\.75/);
+      assert.doesNotMatch(tooltip, /ID:|nova-2-lite/);
+      assert.doesNotMatch(tooltip, /\$\$/);
+      assert.match(tooltip, /Cache read: \$0\.0825/);
+      assert.match(tooltip, /Cache write: \$0\.33/);
+      assert.match(tooltip, /\*\*Size\*\*/);
+      assert.match(tooltip, /\*\*Note\*\*/);
+      assert.match(tooltip, /AWS pricing varies by Region/);
+      assert.doesNotMatch(tooltip, /GitHub Copilot credits/);
+    });
+
+    test("formats native picker cost values in USD and exposes the temperature warning", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const modelId = "anthropic.claude-sonnet-5";
+      const cost = { cache_read: 0.2, cache_write: 2.5, input: 2, output: 10 };
+      const detail = provider.formatDetail(modelId, 936_000, 64_000, false, cost);
+      const tooltip = provider.formatTooltip({
+        cost,
+        maxInput: 936_000,
+        maxOutput: 64_000,
+        modelId,
+        providerName: "Anthropic",
+        route: "Direct foundation model",
+        vision: false,
+      });
+
+      assert.match(detail, /\$2\.00 in \/ \$10\.00 out/);
+      assert.doesNotMatch(detail, /\$\$/);
+      assert.match(tooltip, /In: \$2\.00/);
+      assert.match(tooltip, /Out: \$10\.00/);
+      assert.equal(getModelProfile(modelId).temperatureDeprecated, true);
+    });
+
+    test("adds AWS review retention warning only to Claude Fable 5 models", () => {
+      const warning = getModelDataRetentionWarning("global.anthropic.claude-fable-5-1").warningText
+        ?.data_retention;
+
+      assert.ok(warning);
+      assert.match(warning, /retained for 30 days/);
+      assert.match(warning, /manually reviewed/);
+      assert.match(warning, /aws_review/);
+      assert.ok(warning.length < 140);
+      const fableTooltip = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      ).formatTooltip({
+        maxInput: 900_000,
+        maxOutput: 64_000,
+        modelId: "anthropic.claude-fable-5",
+        providerName: "Anthropic",
+        route: "Direct foundation model",
+        vision: false,
+      });
+      assert.ok(fableTooltip.startsWith(`**WARNING: Data retention**  \n`));
+      assert.ok(fableTooltip.includes(warning));
+      assert.match(fableTooltip, /\*\*Size\*\*/);
+      assert.match(fableTooltip, /\*\*Owner\*\*/);
+      assert.ok(getModelDataRetentionWarning("anthropic.claude-fable-5").statusIcon);
+      assert.equal(
+        getModelDataRetentionWarning("anthropic.claude-haiku-4-5-20251001-v1:0").warningText,
+        undefined,
+      );
+      assert.equal(
+        getModelDataRetentionWarning("anthropic.claude-haiku-4-5-20251001-v1:0").statusIcon,
+        undefined,
+      );
     });
   });
 
@@ -939,6 +1089,54 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
 
       // Tool choice should not be set for models that don't support it
       assert.equal(out.toolChoice, undefined);
+    });
+
+    test("convertTools omits tool-definition cache points for Nova", () => {
+      const out = convertTools(
+        {
+          tools: [{ description: "Tool", inputSchema: { type: "object" }, name: "my_tool" }],
+        },
+        "amazon.nova-2-lite-v1:0",
+        false,
+        true,
+      );
+
+      assert.ok(out);
+      assert.equal(
+        out.tools?.some((tool) => "cachePoint" in tool),
+        false,
+      );
+    });
+
+    test("convertTools omits tools when models.dev explicitly disables tool calls", () => {
+      const out = convertTools(
+        {
+          tools: [{ description: "Tool", inputSchema: { type: "object" }, name: "my_tool" }],
+        },
+        "google.gemma-3-27b-it",
+        false,
+        false,
+        false,
+      );
+
+      assert.equal(out, undefined);
+    });
+
+    test("convertTools retains tool-definition caching for supported Claude models", () => {
+      const out = convertTools(
+        {
+          tools: [{ description: "Tool", inputSchema: { type: "object" }, name: "my_tool" }],
+        },
+        "anthropic.claude-sonnet-4-6",
+        false,
+        true,
+      );
+
+      assert.ok(out);
+      assert.equal(
+        out.tools?.some((tool) => "cachePoint" in tool),
+        true,
+      );
     });
 
     test("convertTools sets toolChoice for models that support it", () => {
@@ -1597,6 +1795,23 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       assert.equal(schema, undefined);
     });
 
+    test("does not offer reasoning effort for Nova 2 Lite despite models.dev reasoning metadata", () => {
+      const modelsDevelopmentMap: ModelsDevelopmentMap = new Map([
+        [
+          "amazon.nova-2-lite-v1:0",
+          { limit: { context: 1_000_000, output: 65_535 }, reasoning: true },
+        ],
+      ]);
+
+      const schema = callBuildConfigSchema("global.amazon.nova-2-lite-v1:0", modelsDevelopmentMap);
+
+      assert.equal(schema?.properties?.reasoningEffort, undefined);
+      assert.equal(
+        getModelProfile("global.amazon.nova-2-lite-v1:0").supportsReasoningEffort,
+        false,
+      );
+    });
+
     test("returns contextSize picker for Opus 4.6 (optional 1M context)", () => {
       // Opus 4.6 default: 200K context window (full, not context-output)
       const schema = callBuildConfigSchema("anthropic.claude-opus-4-6-v1", new Map(), {
@@ -1885,6 +2100,22 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       const result = callResolveModelLimits("amazon.nova-pro-v1:0", false, map);
       assert.equal(result.maxOutputTokens, 8192);
       assert.equal(result.maxInputTokens, 300_000 - 8192); // input budget = 300K - 8K
+    });
+
+    test("reserves usable input context when models.dev output limit is implausibly large", () => {
+      const map = makeDevelopmentMapEntry("qwen.qwen3-next-80b-a3b", 262_144, 262_000);
+      const result = callResolveModelLimits("qwen.qwen3-next-80b-a3b", false, map);
+
+      assert.equal(result.maxInputTokens, 131_072);
+      assert.equal(result.maxOutputTokens, 131_072);
+    });
+
+    test("preserves models.dev output limit when it is below the context window", () => {
+      const map = makeDevelopmentMapEntry("nvidia.nemotron-super-3-120b", 262_144, 131_072);
+      const result = callResolveModelLimits("nvidia.nemotron-super-3-120b", false, map);
+
+      assert.equal(result.maxInputTokens, 131_072);
+      assert.equal(result.maxOutputTokens, 131_072);
     });
 
     test("falls back to getModelTokenLimits for unknown models", () => {

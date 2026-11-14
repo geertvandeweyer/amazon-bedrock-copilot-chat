@@ -39,6 +39,7 @@
           }
         ],
         "release_date": "2025-12-02",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -161,6 +162,7 @@
           }
         ],
         "release_date": "2026-06-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -196,6 +198,43 @@
           }
         ],
         "release_date": "2026-09-01",
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "anthropic.claude-fable-5-2": {
+        "attachment": true,
+        "canonical_model_id": "anthropic/claude-fable-5-2",
+        "cost": {
+          "cache_read": 0.2,
+          "cache_write": 10,
+          "input": 8,
+          "output": 40
+        },
+        "description": "Claude model for demanding reasoning and long-horizon agentic work",
+        "family": "claude-fable",
+        "id": "anthropic.claude-fable-5-2",
+        "knowledge": "2026-06",
+        "last_updated": "2026-11-09",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image", "pdf"],
+          "output": ["text"]
+        },
+        "name": "Claude Fable 5.2",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-11-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -285,7 +324,7 @@
           }
         ],
         "release_date": "2026-10-07",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -341,7 +380,7 @@
         "family": "claude-opus",
         "id": "anthropic.claude-opus-4-5-20251101-v1:0",
         "knowledge": "2025-05",
-        "last_updated": "2025-11-01",
+        "last_updated": "2025-11-24",
         "limit": {
           "context": 200000,
           "output": 64000
@@ -366,7 +405,7 @@
             "type": "budget_tokens"
           }
         ],
-        "release_date": "2025-11-01",
+        "release_date": "2025-11-24",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -449,6 +488,7 @@
           }
         ],
         "release_date": "2026-04-16",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -487,6 +527,7 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -525,6 +566,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -560,6 +602,7 @@
           }
         ],
         "release_date": "2026-09-22",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -598,6 +641,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -680,7 +724,7 @@
           }
         ],
         "release_date": "2026-06-30",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -716,7 +760,7 @@
           }
         ],
         "release_date": "2026-09-28",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -746,6 +790,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -775,6 +820,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -804,6 +850,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -932,7 +979,7 @@
           }
         ],
         "release_date": "2026-10-07",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1014,6 +1061,7 @@
           }
         ],
         "release_date": "2026-04-16",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1052,6 +1100,7 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1090,6 +1139,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1125,6 +1175,7 @@
           }
         ],
         "release_date": "2026-09-22",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1163,6 +1214,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -1245,7 +1297,43 @@
           }
         ],
         "release_date": "2026-06-30",
-        "structured_output": false,
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "au.anthropic.claude-sonnet-5-5": {
+        "attachment": true,
+        "canonical_model_id": "anthropic/claude-sonnet-5-5",
+        "cost": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 11
+        },
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "id": "au.anthropic.claude-sonnet-5-5",
+        "knowledge": "2026-06",
+        "last_updated": "2026-09-28",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image", "pdf"],
+          "output": ["text"]
+        },
+        "name": "Claude Sonnet 5.5 (AU)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-09-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1275,6 +1363,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -1303,6 +1392,7 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-01-20",
+        "status": "deprecated",
         "temperature": true,
         "tool_call": false
       },
@@ -1335,6 +1425,7 @@
           }
         ],
         "release_date": "2025-08-21",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -1408,6 +1499,7 @@
           }
         ],
         "release_date": "2025-12-02",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -1437,6 +1529,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -1466,6 +1559,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -1495,6 +1589,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -1530,6 +1625,7 @@
           }
         ],
         "release_date": "2026-06-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1619,7 +1715,7 @@
           }
         ],
         "release_date": "2026-10-07",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1636,7 +1732,7 @@
         "family": "claude-opus",
         "id": "eu.anthropic.claude-opus-4-5-20251101-v1:0",
         "knowledge": "2025-05",
-        "last_updated": "2025-11-01",
+        "last_updated": "2025-11-24",
         "limit": {
           "context": 200000,
           "output": 64000
@@ -1661,7 +1757,7 @@
             "type": "budget_tokens"
           }
         ],
-        "release_date": "2025-11-01",
+        "release_date": "2025-11-24",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -1744,6 +1840,7 @@
           }
         ],
         "release_date": "2026-04-16",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1782,6 +1879,7 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1820,6 +1918,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1855,6 +1954,7 @@
           }
         ],
         "release_date": "2026-09-22",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -1932,6 +2032,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -2014,7 +2115,7 @@
           }
         ],
         "release_date": "2026-06-30",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2050,7 +2151,7 @@
           }
         ],
         "release_date": "2026-09-28",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2077,6 +2178,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2025-04-08",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -2115,6 +2217,7 @@
           }
         ],
         "release_date": "2025-12-02",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -2150,6 +2253,7 @@
           }
         ],
         "release_date": "2026-06-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2185,6 +2289,43 @@
           }
         ],
         "release_date": "2026-09-01",
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "global.anthropic.claude-fable-5-2": {
+        "attachment": true,
+        "canonical_model_id": "anthropic/claude-fable-5-2",
+        "cost": {
+          "cache_read": 0.2,
+          "cache_write": 10,
+          "input": 8,
+          "output": 40
+        },
+        "description": "Claude model for demanding reasoning and long-horizon agentic work",
+        "family": "claude-fable",
+        "id": "global.anthropic.claude-fable-5-2",
+        "knowledge": "2026-06",
+        "last_updated": "2026-11-09",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image", "pdf"],
+          "output": ["text"]
+        },
+        "name": "Claude Fable 5.2 (Global)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-11-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2274,7 +2415,7 @@
           }
         ],
         "release_date": "2026-10-07",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2291,7 +2432,7 @@
         "family": "claude-opus",
         "id": "global.anthropic.claude-opus-4-5-20251101-v1:0",
         "knowledge": "2025-05",
-        "last_updated": "2025-11-01",
+        "last_updated": "2025-11-24",
         "limit": {
           "context": 200000,
           "output": 64000
@@ -2316,7 +2457,7 @@
             "type": "budget_tokens"
           }
         ],
-        "release_date": "2025-11-01",
+        "release_date": "2025-11-24",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -2399,6 +2540,7 @@
           }
         ],
         "release_date": "2026-04-16",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2437,6 +2579,7 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2475,6 +2618,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2510,6 +2654,7 @@
           }
         ],
         "release_date": "2026-09-22",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2587,6 +2732,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -2669,7 +2815,7 @@
           }
         ],
         "release_date": "2026-06-30",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2705,7 +2851,7 @@
           }
         ],
         "release_date": "2026-09-28",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -2736,6 +2882,41 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2026-07-16",
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "global.moonshotai.kimi-k3.1": {
+        "attachment": true,
+        "canonical_model_id": "moonshotai/kimi-k3.1-pro",
+        "cost": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 20
+        },
+        "description": "Multimodal Kimi model with a 1M-token context window and always-on reasoning, for coding, 3D creation and financial research",
+        "family": "kimi-k3",
+        "id": "global.moonshotai.kimi-k3.1",
+        "last_updated": "2026-10-23",
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "modalities": {
+          "input": ["text", "image"],
+          "output": ["text"]
+        },
+        "name": "Kimi K3.1 Pro Highspeed (Global)",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["none", "low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-10-23",
         "structured_output": true,
         "temperature": false,
         "tool_call": true
@@ -2792,7 +2973,7 @@
         ],
         "release_date": "2026-07-09",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "global.openai.gpt-5.6-sol": {
@@ -2846,8 +3027,8 @@
           }
         ],
         "release_date": "2026-07-09",
-        "structured_output": false,
-        "temperature": false,
+        "structured_output": true,
+        "temperature": true,
         "tool_call": true
       },
       "global.openai.gpt-5.6-terra": {
@@ -2901,8 +3082,8 @@
           }
         ],
         "release_date": "2026-07-09",
-        "structured_output": false,
-        "temperature": false,
+        "structured_output": true,
+        "temperature": true,
         "tool_call": true
       },
       "global.openai.gpt-6-astra": {
@@ -3031,7 +3212,7 @@
         ],
         "release_date": "2026-09-22",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "global.openai.gpt-6-sol": {
@@ -3086,7 +3267,7 @@
         ],
         "release_date": "2026-09-22",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "global.openai.gpt-6.1-sol": {
@@ -3161,6 +3342,61 @@
         "release_date": "2026-09-29",
         "structured_output": true,
         "temperature": false,
+        "tool_call": true
+      },
+      "global.openai.gpt-6.1-terra": {
+        "attachment": true,
+        "canonical_model_id": "openai/gpt-6.1-terra",
+        "cost": {
+          "cache_read": 0.05,
+          "cache_write": 1.25,
+          "context_over_200k": {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5
+          },
+          "input": 1,
+          "output": 5,
+          "tiers": [
+            {
+              "cache_read": 0.1,
+              "cache_write": 2.5,
+              "input": 2,
+              "output": 7.5,
+              "tier": {
+                "size": 272000,
+                "type": "context"
+              }
+            }
+          ]
+        },
+        "description": "Fast, efficient model for visual reasoning, precise computer use, and clear, natural writing.",
+        "family": "gpt-terra",
+        "id": "global.openai.gpt-6.1-terra",
+        "knowledge": "2026-06-01",
+        "last_updated": "2026-10-26",
+        "limit": {
+          "context": 1050000,
+          "input": 922000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image"],
+          "output": ["text"]
+        },
+        "name": "GPT-6.1 Terra (Global)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["none", "low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-10-26",
+        "structured_output": true,
+        "temperature": true,
         "tool_call": true
       },
       "global.xai.grok-4.6": {
@@ -3261,7 +3497,7 @@
         "reasoning_options": [
           {
             "type": "effort",
-            "values": ["none", "low", "high", "max"]
+            "values": ["low", "medium", "high", "xhigh", "max"]
           }
         ],
         "release_date": "2026-08-14",
@@ -3293,6 +3529,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-03-12",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": false
@@ -3321,6 +3558,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-03-12",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": false
@@ -3349,6 +3587,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-03-12",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": false
       },
@@ -3400,6 +3640,7 @@
         "description": "Largest Gemma 4 instruction model for open, self-hosted chat and reasoning",
         "family": "gemma",
         "id": "google.gemma-4-31b",
+        "knowledge": "2025-01",
         "last_updated": "2026-04-02",
         "limit": {
           "context": 262144,
@@ -3540,6 +3781,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": false,
         "temperature": false,
         "tool_call": true
       },
@@ -3634,7 +3876,7 @@
         ],
         "release_date": "2026-07-09",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "in.openai.gpt-5.6-terra": {
@@ -3688,8 +3930,8 @@
           }
         ],
         "release_date": "2026-07-09",
-        "structured_output": false,
-        "temperature": false,
+        "structured_output": true,
+        "temperature": true,
         "tool_call": true
       },
       "jp.amazon.nova-2-lite-v1:0": {
@@ -3727,6 +3969,7 @@
           }
         ],
         "release_date": "2025-12-02",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -3816,7 +4059,7 @@
           }
         ],
         "release_date": "2026-10-07",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -3855,6 +4098,7 @@
           }
         ],
         "release_date": "2026-04-16",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -3893,6 +4137,7 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -3931,6 +4176,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -3966,6 +4212,7 @@
           }
         ],
         "release_date": "2026-09-22",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -4004,6 +4251,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4086,7 +4334,7 @@
           }
         ],
         "release_date": "2026-06-30",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -4114,6 +4362,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-07-23",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -4141,6 +4391,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-07-23",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -4168,6 +4420,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-12-06",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -4195,6 +4449,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-04-05",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -4222,6 +4478,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-04-05",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -4250,6 +4508,7 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-10-27",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4279,6 +4538,7 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-12-23",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4336,6 +4596,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-12-09",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4500,6 +4761,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2025-04-08",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -4526,6 +4788,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-07-15",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4553,6 +4816,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-07-15",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4583,6 +4847,7 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-11-06",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4644,6 +4909,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-10-28",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4658,6 +4924,7 @@
         "description": "Small Nemotron 3 MoE for efficient coding, math, and long-context agents",
         "family": "nemotron",
         "id": "nvidia.nemotron-nano-3-30b",
+        "knowledge": "2025-06-25",
         "last_updated": "2025-12-23",
         "limit": {
           "context": 262144,
@@ -4686,6 +4953,7 @@
         "description": "Compact Nemotron model for efficient reasoning and deployable AI agents",
         "family": "nemotron",
         "id": "nvidia.nemotron-nano-9b-v2",
+        "knowledge": "2024-09",
         "last_updated": "2025-08-18",
         "limit": {
           "context": 131072,
@@ -4699,6 +4967,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-08-18",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -4713,6 +4982,7 @@
         "description": "Nemotron middle tier for collaborative agents and high-volume reasoning workloads",
         "family": "nemotron",
         "id": "nvidia.nemotron-super-3-120b",
+        "knowledge": "2025-06",
         "last_updated": "2026-03-11",
         "limit": {
           "context": 262144,
@@ -4808,7 +5078,7 @@
         ],
         "release_date": "2026-04-23",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "openai.gpt-5.6-luna": {
@@ -4868,7 +5138,7 @@
         ],
         "release_date": "2026-07-09",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "openai.gpt-5.6-sol": {
@@ -4928,7 +5198,7 @@
         ],
         "release_date": "2026-07-09",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "openai.gpt-5.6-terra": {
@@ -4988,7 +5258,7 @@
         ],
         "release_date": "2026-07-09",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "openai.gpt-6-astra": {
@@ -5125,7 +5395,7 @@
         ],
         "release_date": "2026-09-22",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "openai.gpt-6-sol": {
@@ -5185,7 +5455,7 @@
         ],
         "release_date": "2026-09-22",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "openai.gpt-6.1-sol": {
@@ -5265,6 +5535,66 @@
         "temperature": false,
         "tool_call": true
       },
+      "openai.gpt-6.1-terra": {
+        "attachment": true,
+        "canonical_model_id": "openai/gpt-6.1-terra",
+        "cost": {
+          "cache_read": 0.055,
+          "cache_write": 1.375,
+          "context_over_200k": {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25
+          },
+          "input": 1.1,
+          "output": 5.5,
+          "tiers": [
+            {
+              "cache_read": 0.11,
+              "cache_write": 2.75,
+              "input": 2.2,
+              "output": 8.25,
+              "tier": {
+                "size": 272000,
+                "type": "context"
+              }
+            }
+          ]
+        },
+        "description": "Fast, efficient model for visual reasoning, precise computer use, and clear, natural writing.",
+        "family": "gpt-terra",
+        "id": "openai.gpt-6.1-terra",
+        "knowledge": "2026-06-01",
+        "last_updated": "2026-10-26",
+        "limit": {
+          "context": 1050000,
+          "input": 922000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image", "pdf"],
+          "output": ["text"]
+        },
+        "name": "GPT-6.1 Terra",
+        "open_weights": false,
+        "provider": {
+          "api": "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+          "npm": "@ai-sdk/amazon-bedrock/mantle",
+          "shape": "responses"
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["none", "low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-10-26",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "openai.gpt-oss-120b": {
         "attachment": false,
         "canonical_model_id": "openai/gpt-oss-120b",
@@ -5275,6 +5605,7 @@
         "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
         "family": "gpt-oss",
         "id": "openai.gpt-oss-120b",
+        "knowledge": "2024-06",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 131072,
@@ -5313,6 +5644,7 @@
         "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
         "family": "gpt-oss",
         "id": "openai.gpt-oss-120b-1:0",
+        "knowledge": "2024-06",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 131072,
@@ -5346,6 +5678,7 @@
         "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
         "family": "gpt-oss",
         "id": "openai.gpt-oss-20b",
+        "knowledge": "2024-06",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 131072,
@@ -5384,6 +5717,7 @@
         "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
         "family": "gpt-oss",
         "id": "openai.gpt-oss-20b-1:0",
+        "knowledge": "2024-06",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 131072,
@@ -5529,7 +5863,7 @@
             "type": "toggle"
           }
         ],
-        "release_date": "2025-04",
+        "release_date": "2025-04-28",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -5558,6 +5892,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-07-31",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -5586,6 +5921,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-07-23",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -5684,6 +6020,7 @@
         "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
         "family": "gpt-oss",
         "id": "us-gov.openai.gpt-oss-120b-1:0",
+        "knowledge": "2024-06",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 128000,
@@ -5717,6 +6054,7 @@
         "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
         "family": "gpt-oss",
         "id": "us-gov.openai.gpt-oss-20b-1:0",
+        "knowledge": "2024-06",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 128000,
@@ -5775,6 +6113,7 @@
           }
         ],
         "release_date": "2025-12-02",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -5804,6 +6143,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -5833,6 +6173,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -5893,6 +6234,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-12-03",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -5928,6 +6270,7 @@
           }
         ],
         "release_date": "2026-06-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -5963,6 +6306,43 @@
           }
         ],
         "release_date": "2026-09-01",
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "us.anthropic.claude-fable-5-2": {
+        "attachment": true,
+        "canonical_model_id": "anthropic/claude-fable-5-2",
+        "cost": {
+          "cache_read": 0.22,
+          "cache_write": 11,
+          "input": 8.8,
+          "output": 44
+        },
+        "description": "Claude model for demanding reasoning and long-horizon agentic work",
+        "family": "claude-fable",
+        "id": "us.anthropic.claude-fable-5-2",
+        "knowledge": "2026-06",
+        "last_updated": "2026-11-09",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image", "pdf"],
+          "output": ["text"]
+        },
+        "name": "Claude Fable 5.2 (US)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-11-09",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6052,7 +6432,7 @@
           }
         ],
         "release_date": "2026-10-07",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6108,7 +6488,7 @@
         "family": "claude-opus",
         "id": "us.anthropic.claude-opus-4-5-20251101-v1:0",
         "knowledge": "2025-05",
-        "last_updated": "2025-11-01",
+        "last_updated": "2025-11-24",
         "limit": {
           "context": 200000,
           "output": 64000
@@ -6133,7 +6513,7 @@
             "type": "budget_tokens"
           }
         ],
-        "release_date": "2025-11-01",
+        "release_date": "2025-11-24",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -6216,6 +6596,7 @@
           }
         ],
         "release_date": "2026-04-16",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6254,6 +6635,7 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6292,6 +6674,7 @@
           }
         ],
         "release_date": "2026-07-24",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6327,6 +6710,7 @@
           }
         ],
         "release_date": "2026-09-22",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6404,6 +6788,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -6486,7 +6871,7 @@
           }
         ],
         "release_date": "2026-06-30",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6522,7 +6907,7 @@
           }
         ],
         "release_date": "2026-09-28",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -6551,6 +6936,8 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-01-20",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": false
       },
@@ -6578,6 +6965,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-07-23",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -6605,6 +6994,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-07-23",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -6632,6 +7023,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-12-06",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -6659,6 +7052,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-04-05",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -6686,6 +7081,8 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2025-04-05",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -6712,6 +7109,7 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2025-04-08",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -6742,6 +7140,41 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2026-07-16",
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "us.moonshotai.kimi-k3.1": {
+        "attachment": true,
+        "canonical_model_id": "moonshotai/kimi-k3.1-pro",
+        "cost": {
+          "cache_read": 0.22,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 22
+        },
+        "description": "Multimodal Kimi model with a 1M-token context window and always-on reasoning, for coding, 3D creation and financial research",
+        "family": "kimi-k3",
+        "id": "us.moonshotai.kimi-k3.1",
+        "last_updated": "2026-10-23",
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "modalities": {
+          "input": ["text", "image"],
+          "output": ["text"]
+        },
+        "name": "Kimi K3.1 Pro Highspeed (US)",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["none", "low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-10-23",
         "structured_output": true,
         "temperature": false,
         "tool_call": true
@@ -6798,7 +7231,7 @@
         ],
         "release_date": "2026-07-09",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "us.openai.gpt-5.6-sol": {
@@ -6852,8 +7285,8 @@
           }
         ],
         "release_date": "2026-07-09",
-        "structured_output": false,
-        "temperature": false,
+        "structured_output": true,
+        "temperature": true,
         "tool_call": true
       },
       "us.openai.gpt-5.6-terra": {
@@ -6907,8 +7340,8 @@
           }
         ],
         "release_date": "2026-07-09",
-        "structured_output": false,
-        "temperature": false,
+        "structured_output": true,
+        "temperature": true,
         "tool_call": true
       },
       "us.openai.gpt-6-astra": {
@@ -7037,7 +7470,7 @@
         ],
         "release_date": "2026-09-22",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "us.openai.gpt-6-sol": {
@@ -7092,7 +7525,7 @@
         ],
         "release_date": "2026-09-22",
         "structured_output": true,
-        "temperature": false,
+        "temperature": true,
         "tool_call": true
       },
       "us.openai.gpt-6.1-sol": {
@@ -7169,6 +7602,61 @@
         "temperature": false,
         "tool_call": true
       },
+      "us.openai.gpt-6.1-terra": {
+        "attachment": true,
+        "canonical_model_id": "openai/gpt-6.1-terra",
+        "cost": {
+          "cache_read": 0.055,
+          "cache_write": 1.375,
+          "context_over_200k": {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25
+          },
+          "input": 1.1,
+          "output": 5.5,
+          "tiers": [
+            {
+              "cache_read": 0.11,
+              "cache_write": 2.75,
+              "input": 2.2,
+              "output": 8.25,
+              "tier": {
+                "size": 272000,
+                "type": "context"
+              }
+            }
+          ]
+        },
+        "description": "Fast, efficient model for visual reasoning, precise computer use, and clear, natural writing.",
+        "family": "gpt-terra",
+        "id": "us.openai.gpt-6.1-terra",
+        "knowledge": "2026-06-01",
+        "last_updated": "2026-10-26",
+        "limit": {
+          "context": 1050000,
+          "input": 922000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": ["text", "image"],
+          "output": ["text"]
+        },
+        "name": "GPT-6.1 Terra (US)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["none", "low", "medium", "high", "xhigh", "max"]
+          }
+        ],
+        "release_date": "2026-10-26",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "us.writer.palmyra-x4-v1:0": {
         "attachment": false,
         "canonical_model_id": "writer/palmyra-x4",
@@ -7193,6 +7681,8 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2024-10-09",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -7221,6 +7711,8 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-04-28",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -7322,7 +7814,7 @@
         "reasoning_options": [
           {
             "type": "effort",
-            "values": ["none", "low", "high", "max"]
+            "values": ["low", "medium", "high", "xhigh", "max"]
           }
         ],
         "release_date": "2026-08-14",
@@ -7354,6 +7846,8 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2024-10-09",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -7382,6 +7876,8 @@
         "reasoning": true,
         "reasoning_options": [],
         "release_date": "2025-04-28",
+        "status": "deprecated",
+        "structured_output": false,
         "temperature": true,
         "tool_call": true
       },
@@ -7494,6 +7990,7 @@
           }
         ],
         "release_date": "2025-12-22",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -7528,6 +8025,7 @@
           }
         ],
         "release_date": "2026-01-19",
+        "status": "deprecated",
         "structured_output": true,
         "temperature": true,
         "tool_call": true

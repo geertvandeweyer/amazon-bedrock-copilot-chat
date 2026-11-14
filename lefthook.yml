@@ -27,7 +27,7 @@ pre-commit:
       run: uvx yamllint {staged_files}
     ruff-format:
       glob: "**/*.py"
-      run: uv tool run ruff format --config pyproject.toml {staged_files}
+      run: uv tool run ruff format {staged_files}
       stage_fixed: true
     codecov:
       glob: ".codecov.yml"
