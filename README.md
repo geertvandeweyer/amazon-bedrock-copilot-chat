@@ -24,9 +24,11 @@ A VSCode extension that brings Amazon Bedrock models into GitHub Copilot Chat us
 - **Prompt Caching**: Automatic caching of system prompts, tool definitions, and conversation history for faster responses and reduced costs (Claude and Nova models)
 - **Vision Support**: Work with models that support image inputs
 
+Detailed behavior, configuration, and current limitations are documented in the [extension guide](./docs/EXTENSION_GUIDE.md). See the [VS Code and Copilot integration notes](./docs/VSCODE_INTEGRATION.md) and [token-limit guide](./docs/TOKEN_LIMITS.md) for API/UI interactions and context handling.
+
 ## Prerequisites
 
-- Visual Studio Code version 1.104.0 or higher
+- VS Code **1.142.0 is the user-confirmed functional baseline** for the current extension status. The package manifest currently declares `^1.134.0`; earlier versions have not been verified by this guide.
 - GitHub Copilot extension
 - AWS credentials (AWS Profile, API Key, or Access Keys)
 - Access to Amazon Bedrock in your AWS account
