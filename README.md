@@ -1,8 +1,8 @@
 # Amazon Bedrock Provider for GitHub Copilot Chat
 
-A VSCode extension that brings Amazon Bedrock models into GitHub Copilot Chat using VSCode's official [Language Model Chat Provider API](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider) and the AWS SDK.
+**This plugin is a forked from the original extension of [tinovyatkin](https://github.com/tinovyatkin/amazon-bedrock-copilot-chat). It was extended to enhance performance and support newer models and versions of VSCode.**
 
-**This plugin was forked from [tinovyatkin](https://github.com/tinovyatkin/amazon-bedrock-copilot-chat) and extended to enhance performance and support newer models.**
+This extension links AWS Bedrock models to the copilot chat in VSCode. It uses the VSCode's official [Language Model Chat Provider API](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider) and the AWS SDK. Currently it has selection of reasoning effort and context size for models supporting it.
 
 ## Features
 

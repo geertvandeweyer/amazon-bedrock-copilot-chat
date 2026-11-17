@@ -1,7 +1,7 @@
 {
   "name": "aws-bedrock-copilot-provider",
   "publisher": "GeertVandeweyer",
-  "displayName": "AWS Bedrock Provider for Copilot",
+  "displayName": "Bedrock Models for VS Code Chat (Community)",
   "description": "Connect AWS Bedrock models (Claude, OpenAI OSS, DeepSeek) to GitHub Copilot Chat. Supports streaming, tool calling, and vision.",
   "icon": "assets/logo.png",
   "repository": {
@@ -152,16 +152,6 @@
     }
   },
   "main": "./dist/extension.js",
-  "sponsor": {
-    "url": "https://github.com/sponsors/geertvandeweyer"
-  },
-  "badges": [
-    {
-      "url": "https://img.shields.io/github/stars/geertvandeweyer/amazon-bedrock-copilot-chat?style=social",
-      "description": "Star amazon-bedrock-copilot-provider on Github",
-      "href": "https://github.com/geertvandeweyer/amazon-bedrock-copilot-chat"
-    }
-  ],
   "scripts": {
     "vscode:prepublish": "bun run package",
     "download-api": "dts dev",
