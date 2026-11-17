@@ -7,7 +7,7 @@ Thank you for your interest in contributing to this project!
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/tinovyatkin/amazon-bedrock-copilot-chat.git
+   git clone https://github.com/geertvandeweyer/amazon-bedrock-copilot-chat.git
    cd amazon-bedrock-copilot-chat
    ```
 
