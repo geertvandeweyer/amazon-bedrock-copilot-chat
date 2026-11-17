@@ -10,6 +10,7 @@ import { type CancellationToken, type LanguageModelResponsePart2, type Progress 
 
 import { logger } from "./logger";
 import { ToolBuffer } from "./tool-buffer";
+import type { BedrockTokenCallContext } from "./types";
 
 export interface StreamProcessingResult {
   thinkingBlock?: ThinkingBlock;
@@ -32,10 +33,12 @@ interface ProcessingState {
 }
 
 export class StreamProcessor {
+  /* eslint-disable unicorn/consistent-class-member-order -- the public API method must precede its private handlers for class sorting */
   async processStream(
     stream: AsyncIterable<ConverseStreamOutput>,
     progress: Progress<LanguageModelResponsePart2>,
     token: CancellationToken,
+    tokenCallContext?: BedrockTokenCallContext,
   ): Promise<StreamProcessingResult> {
     const state: ProcessingState = {
       capturedThinkingBlock: undefined,
@@ -49,7 +52,7 @@ export class StreamProcessor {
     };
 
     state.toolBuffer.clear();
-    logger.info("[Stream Processor] Starting stream processing");
+    logger.debug("[Stream Processor] Starting stream processing");
 
     try {
       for await (const event of stream) {
@@ -58,12 +61,9 @@ export class StreamProcessor {
           break;
         }
 
-        this.handleEvent(event, progress, state);
+        this.handleEvent(event, progress, state, tokenCallContext);
       }
 
-      // Thinking was captured but could not be emitted to the UI because
-      // LanguageModelThinkingPart is not available in this VS Code build.
-      // Emit a visible fallback so the user doesn't see a silent empty turn.
       if (
         !state.hasEmittedContent &&
         !state.hasEmittedThinking &&
@@ -82,10 +82,6 @@ export class StreamProcessor {
         state.hasEmittedContent = true;
       }
 
-      // For genuinely empty responses (no thinking, no text, no tools) with a
-      // normal end_turn stop reason, emit a friendly fallback message instead of
-      // throwing a hard error.  This is a known LLM edge case that can happen
-      // when the model has nothing to say or encounters an internal issue.
       if (
         !state.hasEmittedContent &&
         !state.hasEmittedThinking &&
@@ -105,10 +101,6 @@ export class StreamProcessor {
         state.hasEmittedContent = true;
       }
 
-      // tool_use stop reason with no emitted content means the model tried to
-      // call a tool but the tool call failed to parse (common with models like
-      // GPT OSS that produce malformed tool JSON). Emit a fallback message so
-      // Copilot Chat surfaces something rather than leaving the turn silent.
       if (
         !state.hasEmittedContent &&
         !token.isCancellationRequested &&
@@ -127,7 +119,6 @@ export class StreamProcessor {
 
       this.logCompletion(state);
       this.validateStreamResult(state, token);
-
       return { thinkingBlock: state.capturedThinkingBlock };
     } catch (error) {
       logger.error("[Stream Processor] Error during stream processing:", error);
@@ -175,7 +166,7 @@ export class StreamProcessor {
     progress: Progress<LanguageModelResponsePart2>,
     state: ProcessingState,
   ): void {
-    logger.info("[Stream Processor] Content block stop, index:", stop.contentBlockIndex);
+    logger.debug("[Stream Processor] Content block stop, index:", stop.contentBlockIndex);
 
     if (state.toolBuffer.isEmitted(stop.contentBlockIndex!)) {
       logger.debug("[Stream Processor] Tool call already emitted, skipping duplicate");
@@ -202,6 +193,7 @@ export class StreamProcessor {
     event: ConverseStreamOutput,
     progress: Progress<LanguageModelResponsePart2>,
     state: ProcessingState,
+    tokenCallContext?: BedrockTokenCallContext,
   ): void {
     if (event.messageStart) {
       this.handleMessageStart(event.messageStart);
@@ -214,7 +206,7 @@ export class StreamProcessor {
     } else if (event.messageStop) {
       this.handleMessageStop(event.messageStop, state);
     } else if (event.metadata) {
-      this.handleMetadata(event.metadata, progress);
+      this.handleMetadata(event.metadata, progress, tokenCallContext);
     } else {
       logger.info("[Stream Processor] Unknown event type:", Object.keys(event));
     }
@@ -223,7 +215,7 @@ export class StreamProcessor {
   private handleMessageStart(
     messageStart: NonNullable<ConverseStreamOutput["messageStart"]>,
   ): void {
-    logger.info("[Stream Processor] Message start:", messageStart.role);
+    logger.debug("[Stream Processor] Message start:", messageStart.role);
   }
 
   private handleMessageStop(
@@ -249,7 +241,23 @@ export class StreamProcessor {
   private handleMetadata(
     metadata: NonNullable<ConverseStreamOutput["metadata"]>,
     progress: Progress<LanguageModelResponsePart2>,
+    tokenCallContext?: BedrockTokenCallContext,
   ): void {
+    const usage = metadata?.usage;
+    const promptTokens =
+      (usage?.inputTokens ?? 0) +
+      (usage?.cacheReadInputTokens ?? 0) +
+      (usage?.cacheWriteInputTokens ?? 0);
+    logger.debug("[Stream Processor] Bedrock token usage", {
+      cacheReadInputTokens: usage?.cacheReadInputTokens ?? 0,
+      cacheWriteInputTokens: usage?.cacheWriteInputTokens ?? 0,
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+      outputTokensIncludeReasoning: true,
+      promptTokens,
+      totalTokens: promptTokens + (usage?.outputTokens ?? 0),
+      ...(tokenCallContext && { ...tokenCallContext }),
+    });
     logger.info("[Stream Processor] Metadata received:", metadata);
 
     // Report token usage to VS Code so the context window meter updates.
@@ -257,28 +265,23 @@ export class StreamProcessor {
     // and an OpenAI-format JSON payload { prompt_tokens, completion_tokens, total_tokens }.
     // VS Code's extChatEndpoint reads this via isApiUsage() and updates the
     // "X / YK tokens" display in the chat input bar.
-    const usage = metadata?.usage;
     if (typeof usage?.inputTokens === "number" && typeof usage?.outputTokens === "number") {
       try {
         // On prompt-cached turns Bedrock reports only the freshly-processed slice in
         // inputTokens; the cached bulk is in cacheReadInputTokens / cacheWriteInputTokens.
         // Sum all three so the VS Code context meter reflects the real prompt size,
         // matching what the existing ContextTracker does on the Bedrock side.
-        const promptTokens =
+        const reportedPromptTokens =
           usage.inputTokens +
           (usage.cacheReadInputTokens ?? 0) +
           (usage.cacheWriteInputTokens ?? 0);
         const usagePayload = {
           completion_tokens: usage.outputTokens,
-          prompt_tokens: promptTokens,
-          total_tokens: promptTokens + usage.outputTokens,
+          prompt_tokens: reportedPromptTokens,
+          total_tokens: reportedPromptTokens + usage.outputTokens,
         };
-        progress.report(
-          new vscode.LanguageModelDataPart(
-            new TextEncoder().encode(JSON.stringify(usagePayload)),
-            "usage",
-          ),
-        );
+        const encodedUsage = new TextEncoder().encode(JSON.stringify(usagePayload));
+        progress.report(new vscode.LanguageModelDataPart(encodedUsage, "usage"));
         logger.debug("[Stream Processor] Reported token usage", usagePayload);
       } catch (error) {
         // LanguageModelDataPart may not be available in older VS Code builds — fail silently.
@@ -444,7 +447,7 @@ export class StreamProcessor {
   }
 
   private logCompletion(state: ProcessingState): void {
-    logger.info("[Stream Processor] Stream processing completed", {
+    logger.debug("[Stream Processor] Stream processing completed", {
       capturedThinkingBlock: !!state.capturedThinkingBlock,
       hasEmittedContent: state.hasEmittedContent,
       hasEmittedThinking: state.hasEmittedThinking,
@@ -559,17 +562,39 @@ export class StreamProcessor {
     this.validateContextWindow(state);
     this.validateContentEmission(state, token);
   }
+  /* eslint-enable unicorn/consistent-class-member-order -- class ordering conflict resolved locally */
 }
 
 /**
  * Recursively checks if an assessment contains a detected and blocked guardrail policy
  * Reference: https://github.com/strands-agents/sdk-python/blob/dbf6200d104539217dddfc7bd729c53f46e2ec56/src/strands/models/bedrock.py#L950-L977
  */
-function findDetectedAndBlockedPolicy(input: GuardrailAssessment | GuardrailAssessment[]): boolean {
+function hasBlockedGuardrail(guardrailData: GuardrailTraceAssessment): boolean {
+  const { inputAssessment, outputAssessments } = guardrailData;
+
+  if (inputAssessment) {
+    for (const assessment of Object.values(inputAssessment)) {
+      if (isDetectedAndBlockedPolicy(assessment)) {
+        return true;
+      }
+    }
+  }
+
+  if (outputAssessments) {
+    for (const assessment of Object.values(outputAssessments)) {
+      if (isDetectedAndBlockedPolicy(assessment)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+function isDetectedAndBlockedPolicy(input: GuardrailAssessment | GuardrailAssessment[]): boolean {
   if (Array.isArray(input)) {
     // Handle case where input is an array
     for (const item of input) {
-      if (findDetectedAndBlockedPolicy(item)) {
+      if (isDetectedAndBlockedPolicy(item)) {
         return true;
       }
     }
@@ -577,44 +602,16 @@ function findDetectedAndBlockedPolicy(input: GuardrailAssessment | GuardrailAsse
   }
 
   // Check if input is a dictionary/object
-  const obj = input as Record<string, unknown>;
+  const object = input as Record<string, unknown>;
   // Check if current object has action: BLOCKED and detected: true
-  if (obj.action === GuardrailContentPolicyAction.BLOCKED && obj.detected === true) {
+  if (object.action === GuardrailContentPolicyAction.BLOCKED && object.detected === true) {
     return true;
   }
 
   // Recursively check all values in the object
-  for (const value of Object.values(obj)) {
-    if (typeof value === "object" && value !== null && findDetectedAndBlockedPolicy(value)) {
+  for (const value of Object.values(object)) {
+    if (typeof value === "object" && value !== null && isDetectedAndBlockedPolicy(value)) {
       return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Check if guardrail data contains any blocked policies
- * Reference: https://github.com/strands-agents/sdk-python/blob/dbf6200d104539217dddfc7bd729c53f46e2ec56/src/strands/models/bedrock.py#L637-L650
- */
-function hasBlockedGuardrail(guardrailData: GuardrailTraceAssessment): boolean {
-  const { inputAssessment, outputAssessments } = guardrailData;
-
-  // Check input assessments
-  if (inputAssessment) {
-    for (const assessment of Object.values(inputAssessment)) {
-      if (findDetectedAndBlockedPolicy(assessment)) {
-        return true;
-      }
-    }
-  }
-
-  // Check output assessments
-  if (outputAssessments) {
-    for (const assessment of Object.values(outputAssessments)) {
-      if (findDetectedAndBlockedPolicy(assessment)) {
-        return true;
-      }
     }
   }
 

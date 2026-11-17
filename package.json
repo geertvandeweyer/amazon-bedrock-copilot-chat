@@ -8,9 +8,9 @@
     "type": "git",
     "url": "https://github.com/geertvandeweyer/amazon-bedrock-copilot-chat"
   },
-  "version": "0.16.0",
+  "version": "0.17.0",
   "engines": {
-    "vscode": "^1.134.0"
+    "vscode": "^1.146.0"
   },
   "categories": [
     "AI",

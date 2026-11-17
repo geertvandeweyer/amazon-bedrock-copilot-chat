@@ -1,7 +1,12 @@
 import { ModelModality } from "@aws-sdk/client-bedrock";
-import type { ConverseStreamCommandInput } from "@aws-sdk/client-bedrock-runtime";
+import type {
+  ConverseStreamCommandInput,
+  ConverseStreamOutput,
+  Message,
+} from "@aws-sdk/client-bedrock-runtime";
 import * as assert from "node:assert";
 import * as vscode from "vscode";
+import { compactMessageHistory } from "../context-compactor";
 import { convertMessages, stripThinkingContent } from "../converters/messages";
 import { convertTools } from "../converters/tools";
 import { logger } from "../logger";
@@ -12,9 +17,11 @@ import {
   BedrockChatModelProvider,
   getAccountDataRetentionGuidance,
   getModelDataRetentionWarning,
+  getModelDisplayMetadata,
 } from "../provider";
+import { StreamProcessor } from "../stream-processor";
 import type { BedrockModelSummary, ModelsDevelopmentMap } from "../types";
-
+import { reconcileBedrockToolResults } from "../validation";
 interface ProviderInternals {
   applyReasoningEffort: (
     requestInput: { additionalModelRequestFields?: Record<string, unknown> },
@@ -34,6 +41,7 @@ interface ProviderInternals {
     modelProfile: ReturnType<typeof getModelProfile>,
     modelsDevelopmentMap?: ModelsDevelopmentMap,
     limits?: { maxInputTokens: number; maxOutputTokens: number },
+    standardLimits?: { maxInputTokens: number; maxOutputTokens: number },
   ) => undefined | { properties?: Record<string, Record<string, unknown>> };
   buildRequestInput: (
     model: vscode.LanguageModelChatInformation,
@@ -60,6 +68,16 @@ interface ProviderInternals {
     isVision: boolean,
     cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number },
   ) => string;
+  formatModelDescription: (arguments_: {
+    cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number };
+    maxInput: number;
+    maxOutput: number;
+    modelId: string;
+    providerName?: string;
+    route?: string;
+    vision: boolean;
+    warningText?: Record<string, string>;
+  }) => string;
   formatTooltip: (arguments_: {
     cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number };
     maxInput: number;
@@ -68,16 +86,94 @@ interface ProviderInternals {
     providerName: string;
     route: string;
     vision: boolean;
+    warningText?: Record<string, string>;
   }) => string;
   getPickerPricingMetadata: (
     isBYOK: boolean,
-    cost?: { cache_read?: number; cache_write?: number; input?: number; output?: number },
+    cost?: {
+      cache_read?: number;
+      cache_write?: number;
+      context_over_200k?: {
+        cache_read?: number;
+        cache_write?: number;
+        input?: number;
+        output?: number;
+      };
+      input?: number;
+      output?: number;
+    },
   ) => Record<string, boolean | number | string | undefined>;
+  getRequestMaxInputTokens: (
+    model: vscode.LanguageModelChatInformation,
+    modelId: string,
+    selectedContextSize: number | undefined,
+    isContext1MEnabled: boolean,
+    modelsDevelopmentMap: ModelsDevelopmentMap,
+  ) => number;
+  getSelectedContextSize: (
+    model: vscode.LanguageModelChatInformation,
+    requestedContextSize: unknown,
+  ) => number | undefined;
   resolveModelLimits: (
     modelId: string,
     isContext1MEnabled: boolean,
     modelsDevelopmentMap: ModelsDevelopmentMap,
   ) => { maxInputTokens: number; maxOutputTokens: number };
+}
+
+async function callProviderWithContextSize(
+  modelConfig: Record<string, unknown> | undefined,
+  messages: vscode.LanguageModelChatMessage[],
+) {
+  const model: vscode.LanguageModelChatInformation = {
+    capabilities: {},
+    configurationSchema: {
+      properties: { contextSize: { enum: [50_000, 100_000], type: "number" } },
+    },
+    family: "bedrock",
+    id: "amazon.nova-lite-v1:0",
+    maxInputTokens: 291_808,
+    maxOutputTokens: 8192,
+    name: "Amazon Nova Lite",
+    version: "1.0.0",
+  };
+  let requestMaxInputTokens: number | undefined;
+  let summarizeCalls = 0;
+  const mockClient = {
+    resolveModelId: async (modelId: string) => modelId,
+    setAuthConfig: () => {},
+    summarizeConversationHistory: async () => {
+      summarizeCalls += 1;
+      return "Earlier conversation summary";
+    },
+  };
+  const provider = new BedrockChatModelProvider(mockSecretStorage, mockGlobalState);
+  const internals = provider as unknown as ProviderInternals & {
+    client: typeof mockClient;
+    getAuthConfig: () => Promise<{ method: "profile" }>;
+    processResponseStreamWithFallback: () => Promise<void>;
+  };
+  internals.client = mockClient;
+  internals.getAuthConfig = async () => ({ method: "profile" });
+  const originalBuildRequestInput = internals.buildRequestInput.bind(provider);
+  internals.buildRequestInput = (...arguments_) => {
+    requestMaxInputTokens = arguments_[0].maxInputTokens;
+    return originalBuildRequestInput(...arguments_);
+  };
+  internals.processResponseStreamWithFallback = async () => {};
+
+  await provider.provideLanguageModelChatResponse(
+    model,
+    messages,
+    {
+      ...(modelConfig !== undefined && { modelConfiguration: modelConfig }),
+      tools: [],
+    },
+    { report: () => {} },
+    new vscode.CancellationTokenSource().token,
+  );
+
+  return { model, requestMaxInputTokens, summarizeCalls };
 }
 
 function pngFixture(width: number, height: number, payloadLength: number): Uint8Array {
@@ -205,6 +301,7 @@ const callBuildConfigSchema = (
   modelId: string,
   modelsDevelopmentMap: ModelsDevelopmentMap = new Map(),
   limits?: { maxInputTokens: number; maxOutputTokens: number },
+  standardLimits = limits,
 ) => {
   const provider = providerInternals(
     new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
@@ -214,6 +311,7 @@ const callBuildConfigSchema = (
     getModelProfile(modelId),
     modelsDevelopmentMap,
     limits,
+    standardLimits,
   );
 };
 
@@ -275,6 +373,47 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
   });
 
   suite("provider", () => {
+    test("public provider callback emits a selectable context schema for direct GPT-6 Luna", async () => {
+      const modelId = "openai.gpt-6-luna";
+      const profileId = `global.${modelId}`;
+      const modelsDevelopmentMap = loadModelsDevelopmentData();
+      const mockClient = {
+        fetchApplicationInferenceProfiles: async () => [],
+        fetchInferenceProfiles: async () => new Set([profileId]),
+        fetchModels: async () => [createTestModel(modelId)],
+        fetchModelsDevData: async () => modelsDevelopmentMap,
+        getFallbackInferenceProfileIds: () => new Set<string>(),
+        setAuthConfig: () => {},
+        setProfile: () => {},
+        setRegion: () => {},
+      };
+      const provider = new BedrockChatModelProvider(mockSecretStorage, mockGlobalState);
+      const internals = provider as unknown as {
+        client: typeof mockClient;
+        getAuthConfig: () => Promise<{ method: "profile" }>;
+      };
+      internals.client = mockClient;
+      internals.getAuthConfig = async () => ({ method: "profile" });
+
+      const infos = await provider.provideLanguageModelChatInformation(
+        { silent: true },
+        new vscode.CancellationTokenSource().token,
+      );
+      const information = infos.find(
+        (model) => model.id === profileId,
+      ) as vscode.LanguageModelChatInformation & {
+        maxContextWindowTokens?: number;
+      };
+
+      assert.ok(information, `expected provider to emit ${profileId}`);
+      assert.equal(information.maxContextWindowTokens, 1_050_000);
+      assert.deepEqual(
+        information.configurationSchema?.properties?.contextSize?.enum,
+        [256_000, 750_000, 1_050_000],
+      );
+      assert.equal(information.configurationSchema?.properties?.contextSize?.group, "tokens");
+    });
+
     test("prepareLanguageModelChatInformation returns array (no key -> empty)", async () => {
       const provider = new BedrockChatModelProvider(mockSecretStorage, mockGlobalState);
 
@@ -660,8 +799,8 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
 
       assert.match(detail, /budget thinking/);
       assert.doesNotMatch(detail, /adaptive/);
-      assert.match(tooltip, /enabled\+budget_tokens/);
-      assert.doesNotMatch(tooltip, /adaptive/);
+      assert.match(tooltip, /Extended thinking; effort control available/);
+      assert.doesNotMatch(tooltip, /Adaptive thinking/);
     });
 
     test("formats context display from maxInput+maxOutput total", () => {
@@ -686,15 +825,14 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       // detail should show total context (197K) and output (98K)
       assert.match(detail, /^197K ctx · 98K out/);
       // tooltip should show total context 197K, not the inflated 295K
-      assert.match(tooltip, /Context: 197K tokens/);
+      assert.match(tooltip, /Context: Window: 197K tokens, Input: 98K tokens, Output: 98K tokens/);
       assert.match(tooltip, /Output: 98K tokens/);
       assert.doesNotMatch(tooltip, /295K tokens/);
     });
 
     test("shows indicative dollar prices and clarifies they are not Copilot credits", () => {
-      const provider = providerInternals(
-        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
-      );
+      const providerInstance = new BedrockChatModelProvider(mockSecretStorage, mockGlobalState);
+      const provider = providerInternals(providerInstance);
       const cost = { cache_read: 0.0825, cache_write: 0.33, input: 0.33, output: 2.75 };
       const modelId = "amazon.nova-2-lite-v1:0";
 
@@ -718,25 +856,39 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       assert.equal(pickerPricing.isBYOK, true);
       assert.equal(
         pickerPricing.pricing,
-        "In: $0.33 / Out: $2.75\nPricing may vary based on AWS Region",
+        "AWS pricing (USD / 1M tokens):\nInput: $0.33\nOutput: $2.75\nCache read: $0.0825\nCache write: $0.33\nAWS pricing varies by Region",
       );
-      assert.deepEqual(provider.getPickerPricingMetadata(true, { input: 1 }), {});
-      assert.match(tooltip, /^\*\*Owner\*\* {2}\n(&nbsp;){4}Amazon$/m);
-      assert.doesNotMatch(tooltip, /Direct foundation model/);
-      assert.match(tooltip, /\*\*Pricing \(USD \/ 1M tokens\)\*\*/);
+      assert.equal(pickerPricing.longContextInputCost, undefined);
+      const longContextPricing = provider.getPickerPricingMetadata(true, {
+        context_over_200k: { cache_read: 0.02, cache_write: 0.25, input: 0.2, output: 0.75 },
+        input: 0.1,
+        output: 0.5,
+      });
+      assert.equal(longContextPricing.longContextInputCost, "$0.2");
+      assert.equal(longContextPricing.longContextOutputCost, "$0.75");
+      assert.equal(longContextPricing.longContextCacheCost, "$0.02");
+      assert.equal(longContextPricing.longContextCacheWriteCost, "$0.25");
+      assert.deepEqual(provider.getPickerPricingMetadata(true, { input: 1 }), {
+        inputCost: "$1",
+        isBYOK: true,
+        pricing: "AWS pricing (USD / 1M tokens):\nInput: $1\nAWS pricing varies by Region",
+      });
+      assert.match(tooltip, /Owner: Amazon/);
+      assert.match(tooltip, /AWS pricing \(USD \/ 1M tokens\):/);
       assert.match(tooltip, /In: \$0\.33/);
       assert.match(tooltip, /Out: \$2\.75/);
+      assert.match(tooltip, /Invocation route: Direct foundation model/);
       assert.doesNotMatch(tooltip, /ID:|nova-2-lite/);
       assert.doesNotMatch(tooltip, /\$\$/);
       assert.match(tooltip, /Cache read: \$0\.0825/);
       assert.match(tooltip, /Cache write: \$0\.33/);
-      assert.match(tooltip, /\*\*Size\*\*/);
-      assert.match(tooltip, /\*\*Note\*\*/);
+      assert.match(tooltip, /Window: 1M tokens/);
+      assert.match(tooltip, /Pricing note:/);
       assert.match(tooltip, /AWS pricing varies by Region/);
       assert.doesNotMatch(tooltip, /GitHub Copilot credits/);
     });
 
-    test("formats native picker cost values in USD and exposes the temperature warning", () => {
+    test("formats provider cost metadata as ordered AWS USD text", () => {
       const provider = providerInternals(
         new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
       );
@@ -755,43 +907,128 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
 
       assert.match(detail, /\$2\.00 in \/ \$10\.00 out/);
       assert.doesNotMatch(detail, /\$\$/);
-      assert.match(tooltip, /In: \$2\.00/);
-      assert.match(tooltip, /Out: \$10\.00/);
+      assert.match(tooltip, /AWS pricing \(USD \/ 1M tokens\): In: \$2\.00, Out: \$10\.00/);
+      assert.doesNotMatch(tooltip, /\*\*|&nbsp;/);
+      assert.match(
+        provider.formatModelDescription({
+          cost,
+          maxInput: 936_000,
+          maxOutput: 64_000,
+          modelId,
+          providerName: "Anthropic",
+          route: "Direct foundation model",
+          vision: false,
+        }),
+        /Owner: Anthropic \| AWS pricing \(USD \/ 1M tokens\):/,
+      );
       assert.equal(getModelProfile(modelId).temperatureDeprecated, true);
     });
 
-    test("adds AWS review retention warning only to Claude Fable 5 models", () => {
+    test("shows maximum context and a Manage Models hover status for regular models", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const developmentEntry = loadModelsDevelopmentData().get("global.openai.gpt-6-luna");
+      assert.ok(developmentEntry);
+
+      const information = provider.getPickerPricingMetadata(true, developmentEntry.cost);
+      const display = getModelDisplayMetadata(
+        "global.openai.gpt-6-luna",
+        developmentEntry.limit.context,
+      );
+
+      assert.equal(display.statusIcon?.id, "info");
+      assert.match(
+        display.infoText?.local_harness_context ?? "",
+        /context-size settings are available only in the local Copilot harness/,
+      );
+      assert.equal(display.maxContextWindowTokens, developmentEntry.limit.context);
+      assert.equal(information.inputCost, "$0.1");
+      assert.equal(information.longContextInputCost, "$0.2");
+
+      const detail = provider.formatModelDescription({
+        cost: developmentEntry.cost,
+        maxInput: developmentEntry.limit.context - developmentEntry.limit.output,
+        maxOutput: developmentEntry.limit.output,
+        modelId: "global.openai.gpt-6-luna",
+        providerName: "OpenAI",
+        vision: true,
+      });
+      assert.match(detail, /Owner: OpenAI/);
+      assert.match(detail, /Context: Window: 1M tokens, Input: 922K tokens, Output: 128K tokens/);
+      assert.match(detail, / \| AWS pricing/);
+    });
+
+    test("puts model details in the Manage Models name hover for warned and un-warned models", () => {
       const warning = getModelDataRetentionWarning("global.anthropic.claude-fable-5-1").warningText
         ?.data_retention;
+      const regularMetadata = getModelDisplayMetadata("anthropic.claude-haiku-4-5", 200_000);
+      const fableMetadata = getModelDisplayMetadata("anthropic.claude-fable-5", 964_000);
 
       assert.ok(warning);
       assert.match(warning, /retained for 30 days/);
       assert.match(warning, /manually reviewed/);
       assert.match(warning, /aws_review/);
-      assert.ok(warning.length < 140);
-      const fableTooltip = providerInternals(
+      assert.ok(fableMetadata.statusIcon);
+      assert.ok(regularMetadata.statusIcon);
+      assert.equal(regularMetadata.maxContextWindowTokens, 200_000);
+      assert.equal(fableMetadata.maxContextWindowTokens, 964_000);
+      assert.equal(fableMetadata.statusIcon?.id, "warning");
+      assert.equal(regularMetadata.statusIcon?.id, "info");
+      assert.equal(regularMetadata.warningText, undefined);
+      assert.deepEqual(
+        getModelDisplayMetadata("anthropic.claude-haiku-4-5", undefined, {
+          temperature: "Temperature setting is ignored.",
+        }).warningText,
+        { temperature: "Temperature setting is ignored." },
+      );
+
+      const provider = providerInternals(
         new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
-      ).formatTooltip({
+      );
+      const regularTooltip = provider.formatModelDescription({
+        cost: { input: 0.1, output: 0.5 },
+        maxInput: 136_000,
+        maxOutput: 64_000,
+        modelId: "anthropic.claude-haiku-4-5",
+        providerName: "Anthropic",
+        vision: true,
+        warningText: regularMetadata.warningText,
+      });
+      const fableTooltip = provider.formatModelDescription({
         maxInput: 900_000,
         maxOutput: 64_000,
         modelId: "anthropic.claude-fable-5",
         providerName: "Anthropic",
-        route: "Direct foundation model",
         vision: false,
+        warningText: { temperature: "Temperature setting is ignored." },
       });
-      assert.ok(fableTooltip.startsWith(`**WARNING: Data retention**  \n`));
-      assert.ok(fableTooltip.includes(warning));
-      assert.match(fableTooltip, /\*\*Size\*\*/);
-      assert.match(fableTooltip, /\*\*Owner\*\*/);
-      assert.ok(getModelDataRetentionWarning("anthropic.claude-fable-5").statusIcon);
-      assert.equal(
-        getModelDataRetentionWarning("anthropic.claude-haiku-4-5-20251001-v1:0").warningText,
-        undefined,
+
+      assert.match(regularTooltip, /Owner: Anthropic/);
+      assert.match(
+        regularTooltip,
+        /Per-model Bedrock context-size settings are available only in the local Copilot harness/,
       );
-      assert.equal(
-        getModelDataRetentionWarning("anthropic.claude-haiku-4-5-20251001-v1:0").statusIcon,
-        undefined,
+      assert.match(
+        regularTooltip,
+        /Pricing note: AWS pricing varies by Region; verify current AWS rates\./,
       );
+      assert.match(
+        regularTooltip,
+        /Context: Window: 200K tokens, Input: 136K tokens, Output: 64K tokens/,
+      );
+      assert.match(regularTooltip, /Features:.*Image input/);
+      assert.match(
+        fableTooltip,
+        /Data retention warning: Data is retained for 30 days and might be manually reviewed\./,
+      );
+      assert.match(fableTooltip, /Model notes: Temperature setting is ignored\./);
+      assert.doesNotMatch(fableTooltip, /Invocation route/);
+      assert.match(
+        fableTooltip,
+        /Pricing note: AWS pricing varies by Region; verify current AWS rates\./,
+      );
+      assert.doesNotMatch(fableTooltip, /\*\*|&nbsp;/);
     });
   });
 
@@ -900,6 +1137,53 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       assert.equal(resultContent.text, "Search results: Found 5 items");
     });
 
+    test("preserves unmatched continuation tool results as text instead of Bedrock tool results", () => {
+      const messages: vscode.LanguageModelChatMessage[] = [
+        {
+          content: [new vscode.LanguageModelTextPart("Search for cats")],
+          name: undefined,
+          role: vscode.LanguageModelChatMessageRole.User,
+        },
+        {
+          content: [new vscode.LanguageModelToolCallPart("call1", "search", { q: "cats" })],
+          name: undefined,
+          role: vscode.LanguageModelChatMessageRole.Assistant,
+        },
+        {
+          content: [
+            new vscode.LanguageModelToolResultPart("call1", [
+              new vscode.LanguageModelTextPart("Search results: Found 5 items"),
+            ]),
+          ],
+          name: undefined,
+          role: vscode.LanguageModelChatMessageRole.User,
+        },
+        {
+          content: [
+            new vscode.LanguageModelToolResultPart("call1", [
+              new vscode.LanguageModelTextPart("Duplicate result from prior turn"),
+            ]),
+            new vscode.LanguageModelTextPart("Continue from the result"),
+          ],
+          name: undefined,
+          role: vscode.LanguageModelChatMessageRole.User,
+        },
+      ];
+
+      const out = convertMessages(messages, "test.model-id");
+      const latestUserContent = out.messages.at(-1)?.content ?? [];
+
+      assert.equal(
+        out.messages.flatMap((message) => message.content ?? []).filter((block) => block.toolResult)
+          .length,
+        1,
+      );
+      assert.ok(
+        latestUserContent.some((block) => block.text?.includes("Duplicate result from prior turn")),
+      );
+      assert.ok(latestUserContent.some((block) => block.text === "Continue from the result"));
+    });
+
     test("serializes structured tool results as JSON text", () => {
       const toolResult = new vscode.LanguageModelToolResultPart("call1", [
         { result: "ok", values: [1, 2, 3] },
@@ -947,6 +1231,39 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       assert.equal(out.messages[0].content?.length, 2);
       assert.equal(out.messages[0].content?.[0]?.text, "First user message");
       assert.equal(out.messages[0].content?.[1]?.text, "Second user message");
+    });
+  });
+
+  suite("reconcileBedrockToolResults", () => {
+    test("converts duplicate and stale tool results to text", () => {
+      const messages: Message[] = [
+        {
+          content: [{ toolUse: { input: {}, name: "search", toolUseId: "old-call" } }],
+          role: "assistant",
+        },
+        {
+          content: [{ toolResult: { content: [{ text: "Old result" }], toolUseId: "old-call" } }],
+          role: "user",
+        },
+        { content: [{ text: "Final answer" }], role: "assistant" },
+        {
+          content: [
+            { toolResult: { content: [{ text: "Replayed old result" }], toolUseId: "old-call" } },
+            { toolResult: { content: [{ text: "Duplicate result" }], toolUseId: "old-call" } },
+          ],
+          role: "user",
+        },
+      ];
+
+      assert.equal(reconcileBedrockToolResults(messages), 2);
+      assert.equal(messages[1]?.content?.[0]?.toolResult?.toolUseId, "old-call");
+      assert.match(messages[3]?.content?.[0]?.text ?? "", /Replayed old result/);
+      assert.match(messages[3]?.content?.[1]?.text ?? "", /Duplicate result/);
+      assert.equal(
+        messages.flatMap((message) => message.content ?? []).filter((block) => block.toolResult)
+          .length,
+        1,
+      );
     });
   });
 
@@ -1195,6 +1512,69 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
   // Note: validation tests skipped - validateBedrockMessages now validates converted messages
 
   suite("logger", () => {
+    test("logs per-call token limits and Bedrock usage for a chat stream at debug level", async () => {
+      const logs: { args: unknown[]; level: string }[] = [];
+      const mockChannel = {
+        debug: (message: string, ...arguments_: unknown[]) =>
+          recordLog(logs, "debug", message, arguments_),
+        error: (message: string, ...arguments_: unknown[]) =>
+          recordLog(logs, "error", message, arguments_),
+        info: (message: string, ...arguments_: unknown[]) =>
+          recordLog(logs, "info", message, arguments_),
+        trace: (message: string, ...arguments_: unknown[]) =>
+          recordLog(logs, "trace", message, arguments_),
+        warn: (message: string, ...arguments_: unknown[]) =>
+          recordLog(logs, "warn", message, arguments_),
+      } as unknown as vscode.LogOutputChannel;
+      logger.initialize(mockChannel, vscode.ExtensionMode.Test);
+
+      const tokenCallContext = {
+        estimatedInputTokens: 12_000,
+        inputTokenLimit: 5e4,
+        modelOutputTokenLimit: 8.192e3,
+        outputTokenLimit: 2000,
+      };
+      const events: ConverseStreamOutput[] = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: "response" } } },
+        { messageStop: { stopReason: "end_turn" } },
+        {
+          metadata: {
+            metrics: { latencyMs: 1 },
+            usage: {
+              cacheReadInputTokens: 100,
+              cacheWriteInputTokens: 50,
+              inputTokens: 300,
+              outputTokens: 1.8e3,
+              totalTokens: 2.25e3,
+            },
+          },
+        },
+      ];
+
+      await new StreamProcessor().processStream(
+        (async function* () {
+          yield* events;
+        })(),
+        { report: () => {} },
+        new vscode.CancellationTokenSource().token,
+        tokenCallContext,
+      );
+
+      const usageLog = logs.find((entry) => String(entry.args[0]).includes("Bedrock token usage"));
+      assert.ok(usageLog);
+      assert.equal(usageLog.level, "debug");
+      assert.deepEqual(usageLog.args[1], {
+        ...tokenCallContext,
+        cacheReadInputTokens: 100,
+        cacheWriteInputTokens: 50,
+        inputTokens: 300,
+        outputTokens: 1.8e3,
+        outputTokensIncludeReasoning: true,
+        promptTokens: 450,
+        totalTokens: 2.25e3,
+      });
+    });
+
     test("logger supports all log levels", () => {
       const logs: { args: unknown[]; level: string }[] = [];
       const mockChannel = {
@@ -1789,8 +2169,20 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
   });
 
   suite("buildConfigurationSchema", () => {
-    test("returns undefined for models with no configurable options (Nova Lite)", () => {
-      // Nova Lite: 300K context, 8192 output — no thinking, no reasoning, no 1M opt-in
+    test("returns context choices for regular models and defaults to the largest available context", () => {
+      const schema = callBuildConfigSchema("amazon.nova-lite-v1:0", new Map(), {
+        maxInputTokens: 291_808,
+        maxOutputTokens: 8192,
+      });
+
+      assert.deepEqual(schema?.properties?.contextSize?.enum, [256_000, 300_000]);
+      assert.deepEqual(schema?.properties?.contextSize?.enumItemLabels, ["256K", "300K"]);
+      assert.equal(schema?.properties?.contextSize?.default, 300_000);
+      assert.equal(schema?.properties?.contextSize?.group, "tokens");
+      assert.equal(schema?.properties?.maxContextWindowTokens?.default, undefined);
+    });
+
+    test("does not offer context size for models without supplied limits", () => {
       const schema = callBuildConfigSchema("amazon.nova-lite-v1:0");
       assert.equal(schema, undefined);
     });
@@ -1803,26 +2195,60 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
         ],
       ]);
 
-      const schema = callBuildConfigSchema("global.amazon.nova-2-lite-v1:0", modelsDevelopmentMap);
+      const schema = callBuildConfigSchema("global.amazon.nova-2-lite-v1:0", modelsDevelopmentMap, {
+        maxInputTokens: 934_465,
+        maxOutputTokens: 65_535,
+      });
 
       assert.equal(schema?.properties?.reasoningEffort, undefined);
+      assert.deepEqual(schema?.properties?.contextSize?.enum, [256_000, 750_000, 1_000_000]);
       assert.equal(
         getModelProfile("global.amazon.nova-2-lite-v1:0").supportsReasoningEffort,
         false,
       );
     });
 
-    test("returns contextSize picker for Opus 4.6 (optional 1M context)", () => {
-      // Opus 4.6 default: 200K context window (full, not context-output)
+    test("exposes standard and extended context sizes when the workspace default is extended", () => {
+      const schema = callBuildConfigSchema(
+        "anthropic.claude-opus-4-6-v1",
+        new Map(),
+        { maxInputTokens: 872_000, maxOutputTokens: 128_000 },
+        { maxInputTokens: 72_000, maxOutputTokens: 128_000 },
+      );
+      const context = schema?.properties?.contextSize;
+
+      assert.ok(context);
+      assert.deepEqual(context.enum, [200_000, 256_000, 750_000, 1_000_000]);
+      assert.deepEqual(context.enumItemLabels, ["200K", "256K", "750K", "1M"]);
+      assert.equal(context.default, 1_000_000);
+      assert.equal(context.group, "tokens");
+    });
+
+    test("offers maximum context choices to every model with known limits", () => {
+      const schema = callBuildConfigSchema("global.openai.gpt-6-luna", new Map(), {
+        maxInputTokens: 922_000,
+        maxOutputTokens: 128_000,
+      });
+      const context = schema?.properties?.contextSize;
+
+      assert.ok(context);
+      assert.deepEqual(context.enum, [256_000, 750_000, 1_050_000]);
+      assert.deepEqual(context.enumItemLabels, ["256K", "750K", "1.05M"]);
+      assert.equal(schema.properties?.contextSize?.default, 1_050_000);
+      assert.equal(schema.properties?.maxContextWindowTokens?.default, undefined);
+    });
+
+    test("offers all context options for the per-model 1M context selector", () => {
       const schema = callBuildConfigSchema("anthropic.claude-opus-4-6-v1", new Map(), {
         maxInputTokens: 72_000,
         maxOutputTokens: 128_000,
       });
-      assert.ok(schema?.properties?.contextSize, "should have contextSize property");
-      const cs = schema.properties.contextSize;
-      assert.deepEqual(cs.enum, [200_000, 1_000_000]);
-      assert.equal(cs.type, "number");
-      assert.equal(cs.group, "tokens");
+
+      assert.deepEqual(
+        schema?.properties?.contextSize?.enum,
+        [200_000, 256_000, 750_000, 1_000_000],
+      );
+      assert.equal(schema?.properties?.contextSize?.default, 200_000);
     });
 
     test("shows local caps for always-1M Opus 4.7 without a redundant 1M choice", () => {
@@ -1830,7 +2256,8 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
         maxInputTokens: 872_000,
         maxOutputTokens: 128_000,
       });
-      assert.deepEqual(schema?.properties?.contextSize?.enum, [1_000_000, 256_000, 750_000]);
+      assert.deepEqual(schema?.properties?.contextSize?.enum, [256_000, 750_000, 1_000_000]);
+      assert.equal(schema?.properties?.contextSize?.default, 1_000_000);
     });
 
     test("returns thinkingEffort picker for Sonnet 4.6 (supportsThinkingEffort)", () => {
@@ -1939,21 +2366,21 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       const contextSize = schema?.properties?.contextSize;
 
       assert.ok(contextSize);
-      assert.deepEqual(contextSize.enum, [1_050_000, 256_000, 750_000]);
-      assert.deepEqual(contextSize.enumItemLabels, ["1.05M Max", "256K", "750K"]);
+      assert.deepEqual(contextSize.enum, [256_000, 750_000, 1_050_000]);
+      assert.deepEqual(contextSize.enumItemLabels, ["256K", "750K", "1.05M"]);
+      assert.equal(contextSize.default, 1_050_000);
       assert.deepEqual(contextSize.enumDescriptions, [
+        "Limit the local prompt budget",
+        "Limit the local prompt budget",
         "Use the model's maximum context",
-        "Limit the local prompt budget",
-        "Limit the local prompt budget",
       ]);
     });
   });
 
   suite("modelConfiguration overrides in provideLanguageModelChatResponse", () => {
     // These tests verify that modelConfiguration values from the VS Code model
-    // picker are correctly applied as per-request overrides. We test the
-    // buildRequestInput pathway since provideLanguageModelChatResponse requires
-    // live AWS credentials for the full path.
+    // picker are correctly validated and applied to per-request model limits.
+    // Provider helpers avoid AWS access while covering the request budget logic.
 
     test("modelOptions.max_tokens is respected (existing behaviour)", () => {
       const requestInput = callBuildRequestInput("global.anthropic.claude-sonnet-4-6", {
@@ -1977,6 +2404,393 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
       // With context1MEnabled = true (as set when contextSize picker selects 1M)
       const headersWith1M = provider.buildBetaHeaders(profile, modelId, false, true, false);
       assert.equal(headersWith1M.includes("context-1m-2025-08-07"), true);
+    });
+  });
+
+  suite("per-model context size selection", () => {
+    test("accepts only context sizes offered by the model schema", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+
+      const modelInformation: vscode.LanguageModelChatInformation = {
+        capabilities: {},
+        configurationSchema: {
+          properties: {
+            contextSize: { enum: [200_000, 1_000_000, 256_000], type: "number" },
+          },
+        },
+        family: "bedrock",
+        id: "m1",
+        maxInputTokens: 72_000,
+        maxOutputTokens: 128_000,
+        name: "m1",
+        version: "1.0.0",
+      };
+      assert.equal(provider.getSelectedContextSize(modelInformation, 256_000), 256_000);
+      assert.equal(provider.getSelectedContextSize(modelInformation, 500_000), undefined);
+      assert.equal(provider.getSelectedContextSize(modelInformation, NaN), undefined);
+      assert.equal(provider.getSelectedContextSize(modelInformation, "256000"), undefined);
+    });
+
+    test("uses the selected callback context consistently for compaction and request construction", async () => {
+      const messages = [
+        vscode.LanguageModelChatMessage.User("Earlier turn ".repeat(16_000)),
+        vscode.LanguageModelChatMessage.Assistant("Acknowledged"),
+        vscode.LanguageModelChatMessage.User("What should we do next?"),
+      ];
+
+      const smallerSelection = await callProviderWithContextSize({ contextSize: 50_000 }, messages);
+      const largerSelection = await callProviderWithContextSize({ contextSize: 100_000 }, messages);
+
+      assert.equal(smallerSelection.requestMaxInputTokens, 41_808);
+      assert.equal(largerSelection.requestMaxInputTokens, 91_808);
+      assert.equal(smallerSelection.model.maxInputTokens, 291_808);
+      assert.equal(largerSelection.model.maxInputTokens, 291_808);
+      assert.ok(
+        smallerSelection.summarizeCalls > 0,
+        "the smaller allowance should compact history",
+      );
+      assert.equal(largerSelection.summarizeCalls, 0, "the larger allowance should fit as-is");
+    });
+
+    test("uses the existing no-selection fallback for omitted, malformed, and unsupported values", async () => {
+      const messages = [vscode.LanguageModelChatMessage.User("A short request")];
+      const configurations: (Record<string, unknown> | undefined)[] = [
+        undefined,
+        {},
+        { contextSize: "50000" },
+        { contextSize: 0 },
+        { contextSize: 25_000 },
+        { contextSize: NaN },
+      ];
+
+      for (const modelConfig of configurations) {
+        const result = await callProviderWithContextSize(modelConfig, messages);
+        assert.equal(result.requestMaxInputTokens, result.model.maxInputTokens);
+        assert.equal(result.model.maxInputTokens, 291_808);
+        assert.equal(result.summarizeCalls, 0);
+      }
+    });
+
+    test("applies a local input budget to models with and without optional 1M context", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const regularModel: vscode.LanguageModelChatInformation = {
+        capabilities: {},
+        configurationSchema: { properties: { contextSize: { enum: [300_000, 256_000] } } },
+        family: "bedrock",
+        id: "amazon.nova-lite-v1:0",
+        maxInputTokens: 291_808,
+        maxOutputTokens: 8192,
+        name: "Amazon Nova Lite",
+        version: "1.0.0",
+      };
+
+      assert.equal(
+        provider.getRequestMaxInputTokens(regularModel, regularModel.id, 256_000, true, new Map()),
+        195_904,
+      );
+      assert.equal(
+        provider.getRequestMaxInputTokens(
+          regularModel,
+          regularModel.id,
+          undefined,
+          true,
+          new Map(),
+        ),
+        291_808,
+      );
+      assert.equal(regularModel.maxInputTokens, 291_808);
+    });
+
+    test("uses the schema's maximum context when a harness omits modelConfiguration metadata", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const model: vscode.LanguageModelChatInformation = {
+        capabilities: {},
+        configurationSchema: {
+          properties: { contextSize: { enum: [200_000, 1_000_000], type: "number" } },
+        },
+        family: "bedrock",
+        id: "anthropic.claude-opus-4-6-v1",
+        maxInputTokens: 72_000,
+        maxOutputTokens: 128_000,
+        name: "Claude Opus 4.6",
+        version: "1.0.0",
+      };
+
+      // Simulate a harness that preserves the public configuration schema but
+      // drops maxContextWindowTokens and options.modelConfiguration.
+      assert.equal(
+        provider.getRequestMaxInputTokens(model, model.id, undefined, true, new Map()),
+        872_000,
+      );
+      assert.equal(model.maxInputTokens, 72_000);
+    });
+
+    test("uses known 1M model limits when a harness omits schema and modelConfiguration", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const model: vscode.LanguageModelChatInformation = {
+        capabilities: {},
+        family: "bedrock",
+        id: "anthropic.claude-opus-4-6-v1",
+        maxInputTokens: 72_000,
+        maxOutputTokens: 128_000,
+        name: "Claude Opus 4.6",
+        version: "1.0.0",
+      };
+
+      // No modelConfiguration, context-size schema, or extra maximum-context
+      // metadata is available from this harness.
+      assert.equal(
+        provider.getRequestMaxInputTokens(model, model.id, undefined, true, new Map()),
+        872_000,
+      );
+      assert.equal(model.maxInputTokens, 72_000);
+    });
+
+    test("switches optional 1M context on and off per model request", () => {
+      const provider = providerInternals(
+        new BedrockChatModelProvider(mockSecretStorage, mockGlobalState),
+      );
+      const modelId = "anthropic.claude-opus-4-6-v1";
+      const opus: vscode.LanguageModelChatInformation = {
+        capabilities: {},
+        family: "bedrock",
+        id: modelId,
+        maxInputTokens: 72_000,
+        maxOutputTokens: 128_000,
+        name: "Claude Opus 4.6",
+        version: "1.0.0",
+      };
+      const developmentMap = makeDevelopmentMapEntry(modelId, 1_000_000, 128_000);
+
+      assert.equal(
+        provider.getRequestMaxInputTokens(opus, modelId, 1_000_000, true, developmentMap),
+        872_000,
+      );
+      assert.equal(
+        provider.getRequestMaxInputTokens(opus, modelId, 200_000, false, developmentMap),
+        72_000,
+      );
+      assert.equal(opus.maxInputTokens, 72_000);
+    });
+  });
+
+  suite("compactMessageHistory", () => {
+    test("summarizes earlier messages, retains the latest user turn, and keeps system instructions", async () => {
+      const messages: Message[] = [
+        { content: [{ text: "Old user request " + "a".repeat(2000) }], role: "user" },
+        { content: [{ text: "Old assistant answer " + "b".repeat(2000) }], role: "assistant" },
+        { content: [{ text: "Previous user turn" }], role: "user" },
+        { content: [{ text: "Previous assistant turn" }], role: "assistant" },
+        { content: [{ text: "Recent user question" }], role: "user" },
+      ];
+      let summarizeCalls = 0;
+      const result = await compactMessageHistory(
+        messages,
+        [{ text: "Follow the user request safely." }],
+        800,
+        512,
+        async (_transcript) => {
+          summarizeCalls += 1;
+          return "Prior goal and constraints.";
+        },
+      );
+
+      assert.equal(result.compacted, true);
+      assert.equal(summarizeCalls, result.summaryChunkCount);
+      assert.ok(summarizeCalls > 1);
+      assert.equal(result.messages.length, 3);
+      assert.equal(
+        result.messages[0]?.content?.[0]?.text,
+        "The following assistant message is compressed background from earlier conversation turns, not a new user request.",
+      );
+      assert.match(result.messages[1]?.content?.[0]?.text ?? "", /Prior goal and constraints\./);
+      assert.match(result.messages[2]?.content?.[0]?.text ?? "", /Recent user question/);
+      assert.equal(result.system[0]?.text, "Follow the user request safely.");
+      assert.equal(result.system[0]?.text, "Follow the user request safely.");
+      assert.ok(result.originalTokenEstimate > 900);
+    });
+
+    test("does not call Bedrock summarization when messages already fit", async () => {
+      let summarizeCalls = 0;
+      const result = await compactMessageHistory(
+        [{ content: [{ text: "Short user message" }], role: "user" }],
+        [],
+        1000,
+        512,
+        async () => {
+          summarizeCalls += 1;
+          return "unexpected";
+        },
+      );
+
+      assert.equal(result.compacted, false);
+      assert.equal(summarizeCalls, 0);
+      assert.equal(result.messages.length, 1);
+    });
+
+    test("refuses compaction when the latest user turn alone exceeds the selected context", async () => {
+      await assert.rejects(
+        compactMessageHistory(
+          [
+            { content: [{ text: "Old user turn" }], role: "user" },
+            { content: [{ text: "Old assistant turn" }], role: "assistant" },
+            { content: [{ text: "Latest turn " + "x".repeat(4000) }], role: "user" },
+          ],
+          [],
+          700,
+          512,
+          async () => "summary",
+        ),
+        /latest conversation turn and tool interactions exceed the selected context size/,
+      );
+    });
+
+    test("retains the initiating turn and matching tool call when the latest user message is a tool result", async () => {
+      const toolUseId = "call-latest";
+      const messages: Message[] = [
+        { content: [{ text: "Old conversation " + "x".repeat(5000) }], role: "user" },
+        { content: [{ text: "Old assistant response " + "y".repeat(5000) }], role: "assistant" },
+        { content: [{ text: "Start a tool-assisted task" }], role: "user" },
+        {
+          content: [{ toolUse: { input: { query: "latest" }, name: "search", toolUseId } }],
+          role: "assistant",
+        },
+        {
+          content: [{ toolResult: { content: [{ text: "Tool output" }], toolUseId } }],
+          role: "user",
+        },
+      ];
+
+      const result = await compactMessageHistory(messages, [], 2000, 512, async () => "Summary");
+
+      assert.equal(result.compacted, true);
+      assert.ok(
+        result.messages.some((message) =>
+          message.content?.some((block) => block.toolUse?.toolUseId === toolUseId),
+        ),
+      );
+      assert.ok(
+        result.messages.some((message) =>
+          message.content?.some((block) => block.toolResult?.toolUseId === toolUseId),
+        ),
+      );
+      assert.ok(
+        result.messages.some((message) =>
+          message.content?.some((block) => block.text === "Start a tool-assisted task"),
+        ),
+      );
+    });
+
+    test("uses at least 1,000 output tokens for each retained tool-result summary", async () => {
+      const toolUseIds = Array.from({ length: 10 }, (_, index) => `call-${index}`);
+      const messages: Message[] = [
+        { content: [{ text: "Old user request " + "a".repeat(30_000) }], role: "user" },
+        { content: [{ text: "Old assistant answer " + "b".repeat(30_000) }], role: "assistant" },
+        { content: [{ text: "Start the current task" }], role: "user" },
+        {
+          content: toolUseIds.map((toolUseId) => ({
+            toolUse: { input: { query: toolUseId }, name: "search", toolUseId },
+          })),
+          role: "assistant",
+        },
+        {
+          content: toolUseIds.map((toolUseId) => ({
+            toolResult: {
+              content: [{ text: `Large result ${"x".repeat(10_000)}` }],
+              toolUseId,
+            },
+          })),
+          role: "user",
+        },
+      ];
+      const toolSummaryTokenLimits: number[] = [];
+
+      const result = await compactMessageHistory(
+        messages,
+        [],
+        13_600,
+        4096,
+        async (transcript, maxTokens) => {
+          if (transcript.startsWith("Tool result (preserve relevant facts and outcome):")) {
+            toolSummaryTokenLimits.push(maxTokens);
+          }
+          return "Concise result summary.";
+        },
+      );
+
+      assert.equal(result.compacted, true);
+      assert.equal(toolSummaryTokenLimits.length, toolUseIds.length);
+      assert.deepEqual(new Set(toolSummaryTokenLimits), new Set([1000]));
+      assert.ok(result.compactedTokenEstimate <= 13_600);
+    });
+
+    test("rejects compaction when the summarizer returns no visible summary", async () => {
+      await assert.rejects(
+        compactMessageHistory(
+          [
+            { content: [{ text: "Old user request " + "a".repeat(2000) }], role: "user" },
+            { content: [{ text: "Old assistant answer " + "b".repeat(2000) }], role: "assistant" },
+            { content: [{ text: "Current question" }], role: "user" },
+          ],
+          [],
+          800,
+          512,
+          async () => "  ",
+        ),
+        /conversation summary was empty/,
+      );
+    });
+
+    test("preserves the latest assistant tool call and user turn when awaiting a tool result", async () => {
+      const toolUseId = "call-pending";
+      const messages: Message[] = [
+        { content: [{ text: "Old conversation " + "x".repeat(5000) }], role: "user" },
+        { content: [{ text: "Old assistant response " + "y".repeat(5000) }], role: "assistant" },
+        { content: [{ text: "Please search for the latest result" }], role: "user" },
+        {
+          content: [{ toolUse: { input: { query: "latest" }, name: "search", toolUseId } }],
+          role: "assistant",
+        },
+      ];
+
+      const result = await compactMessageHistory(messages, [], 2000, 512, async () => "Summary");
+
+      assert.equal(result.compacted, true);
+      assert.ok(
+        result.messages.some((message) =>
+          message.content?.some((block) => block.toolUse?.toolUseId === toolUseId),
+        ),
+      );
+      assert.ok(
+        result.messages.some((message) =>
+          message.content?.some((block) => block.text === "Please search for the latest result"),
+        ),
+      );
+    });
+
+    test("refuses excessive history rather than silently discarding the oldest chunk", async () => {
+      const messages: Message[] = Array.from({ length: 40 }, (_, index) => ({
+        content: [{ text: `User history ${index} ${"x".repeat(3000)}` }],
+        role: "user",
+      }));
+      let summarizeCalls = 0;
+
+      await assert.rejects(
+        compactMessageHistory(messages, [], 2000, 512, async () => {
+          summarizeCalls += 1;
+          return "summary";
+        }),
+        /too large to summarize safely/,
+      );
+      assert.equal(summarizeCalls, 0);
     });
   });
 
@@ -2142,12 +2956,14 @@ suite("Amazon Bedrock Chat Provider Extension", () => {
           { limit: { context: 100_000, output: 8000 }, reasoning: true },
         ],
       ]);
-      const schema = callBuildConfigSchema("newprovider.new-reasoning-model", developmentMap, {
-        maxInputTokens: 92_000,
-        maxOutputTokens: 8000,
-      });
+      const schema = callBuildConfigSchema(
+        "newprovider.new-reasoning-model",
+        developmentMap,
+        { maxInputTokens: 92_000, maxOutputTokens: 8000 },
+        { maxInputTokens: 92_000, maxOutputTokens: 8000 },
+      );
       assert.ok(schema?.properties?.reasoningEffort);
-      assert.ok(schema?.properties?.contextSize);
+      assert.equal(schema?.properties?.contextSize, undefined);
     });
 
     test("reasoningEffort picker does NOT appear for Anthropic models via models.dev reasoning flag", () => {

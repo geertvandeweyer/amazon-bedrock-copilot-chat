@@ -1,7 +1,9 @@
 import { ValidationException } from "@aws-sdk/client-bedrock-runtime";
 import * as assert from "node:assert";
+import * as vscode from "vscode";
 
 import { BedrockAPIClient } from "../bedrock-client";
+import { logger } from "../logger";
 import type { BedrockModelSummary } from "../types";
 
 interface BedrockAPIClientInternals {
@@ -47,6 +49,15 @@ function internals(client: BedrockAPIClient): BedrockAPIClientInternals {
   return client as unknown as BedrockAPIClientInternals;
 }
 
+function recordLog(
+  logs: { args: unknown[]; level: string }[],
+  level: string,
+  message: string,
+  arguments_: unknown[],
+): void {
+  logs.push({ args: [message, ...arguments_], level });
+}
+
 function runtimeValidationError(): ValidationException {
   return new ValidationException({
     $metadata: { httpStatusCode: 400 },
@@ -55,6 +66,111 @@ function runtimeValidationError(): ValidationException {
 }
 
 suite("BedrockAPIClient unit tests", () => {
+  suite("conversation summaries", () => {
+    test("logs summary call limits, estimated input, and actual Bedrock usage at debug level", async () => {
+      const logs: { args: unknown[]; level: string }[] = [];
+      const mockChannel = {
+        debug: (message: string, ...arguments_: unknown[]) =>
+          recordLog(logs, "debug", message, arguments_),
+        error: () => {},
+        info: () => {},
+        trace: () => {},
+        warn: () => {},
+      } as unknown as vscode.LogOutputChannel;
+      logger.initialize(mockChannel, vscode.ExtensionMode.Test);
+
+      const client = new BedrockAPIClient("us-east-1");
+      const state = internals(client);
+      state.bedrockRuntimeClient = {
+        send: async () => ({
+          output: { message: { content: [{ text: "Summary" }] } },
+          usage: { inputTokens: 321, outputTokens: 45 },
+        }),
+      };
+
+      await client.summarizeConversationHistory("model-id", "transcript", 128, undefined, {
+        inputTokenLimit: 5e4,
+        modelOutputTokenLimit: 8.192e3,
+        outputTokenLimit: 128,
+      });
+
+      const tokenLogs = logs.filter((entry) =>
+        String(entry.args[0]).includes("Bedrock history summary"),
+      );
+      assert.equal(tokenLogs.length, 2);
+      assert.ok(tokenLogs.every(({ level }) => level === "debug"));
+      const requestLog = tokenLogs[0]?.args[1] as Record<string, unknown>;
+      const usageLog = tokenLogs[1]?.args[1] as Record<string, unknown>;
+      assert.equal(typeof requestLog.estimatedInputTokens, "number");
+      assert.ok(Number(requestLog.estimatedInputTokens) > Math.ceil("transcript".length / 4));
+      assert.deepEqual(requestLog, {
+        estimatedInputTokens: requestLog.estimatedInputTokens,
+        inputTokenLimit: 5e4,
+        modelId: "model-id",
+        modelOutputTokenLimit: 8.192e3,
+        outputTokenLimit: 128,
+      });
+      assert.deepEqual(usageLog, {
+        estimatedInputTokens: requestLog.estimatedInputTokens,
+        inputTokenLimit: 5e4,
+        inputTokens: 321,
+        modelId: "model-id",
+        modelOutputTokenLimit: 8.192e3,
+        outputTokenLimit: 128,
+        outputTokens: 45,
+        outputTokensIncludeReasoning: true,
+        totalTokens: 366,
+      });
+    });
+
+    test("uses visible text and excludes reasoning blocks from the summary", async () => {
+      const client = new BedrockAPIClient("us-east-1");
+      const state = internals(client);
+      state.bedrockRuntimeClient = {
+        send: async () => ({
+          output: {
+            message: {
+              content: [
+                { reasoningContent: { redactedContent: new Uint8Array([1, 2, 3]) } },
+                { text: "The task is to update the provider." },
+              ],
+            },
+          },
+        }),
+      };
+
+      const summary = await client.summarizeConversationHistory("model-id", "transcript", 1000);
+
+      assert.equal(summary, "The task is to update the provider.");
+    });
+
+    test("fails closed when Bedrock returns only redacted reasoning", async () => {
+      const client = new BedrockAPIClient("us-east-1");
+      const state = internals(client);
+      let requestSystemPrompt = "";
+      state.bedrockRuntimeClient = {
+        send: async (command) => {
+          const input = (command as { input: { system?: { text?: string }[] } }).input;
+          requestSystemPrompt = input.system?.map(({ text }) => text ?? "").join(" ") ?? "";
+          return {
+            output: {
+              message: {
+                content: [{ reasoningContent: { redactedContent: new Uint8Array([1, 2, 3]) } }],
+              },
+            },
+          };
+        },
+      };
+
+      await assert.rejects(
+        client.summarizeConversationHistory("model-id", "transcript", 1000),
+        /empty conversation summary/,
+      );
+      assert.match(requestSystemPrompt, /Do not include private internal reasoning/);
+      assert.match(requestSystemPrompt, /hidden\/redacted reasoning/);
+    });
+  });
+
   suite("CountTokens unsupported cache", () => {
     test("does not cache transient CountTokens failures", async () => {
       const client = new BedrockAPIClient("us-east-1");

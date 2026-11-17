@@ -44,6 +44,7 @@ export function convertMessages(
   const bedrockMessages: BedrockMessage[] = [];
   const systemMessages: SystemContentBlock[] = [];
   const userMessageIndicesWithToolResults: number[] = [];
+  const pendingToolUseIds = new Set<string>();
 
   logger.trace("[Message Converter] Starting conversion with options:", {
     extendedThinkingEnabled: options?.extendedThinkingEnabled,
@@ -55,7 +56,11 @@ export function convertMessages(
   // Process each message by role
   for (const message of messages) {
     if (message.role === vscode.LanguageModelChatMessageRole.User) {
-      const { content, hasToolResults } = processUserMessageParts(message, profile);
+      const { content, hasToolResults } = processUserMessageParts(
+        message,
+        profile,
+        pendingToolUseIds,
+      );
       mergeOrAppendMessage(
         bedrockMessages,
         content,
@@ -65,6 +70,14 @@ export function convertMessages(
       );
     } else if (message.role === vscode.LanguageModelChatMessageRole.Assistant) {
       const content = processAssistantMessageParts(message);
+      if (bedrockMessages.at(-1)?.role !== ConversationRole.ASSISTANT) {
+        pendingToolUseIds.clear();
+      }
+      for (const block of content) {
+        if (block.toolUse?.toolUseId) {
+          pendingToolUseIds.add(block.toolUse.toolUseId);
+        }
+      }
       mergeOrAppendMessage(
         bedrockMessages,
         content,
@@ -607,6 +620,7 @@ function processToolResultPart(
 function processUserMessageParts(
   message: vscode.LanguageModelChatMessage,
   profile: ModelProfile,
+  pendingToolUseIds: Set<string>,
 ): { content: ContentBlock[]; hasToolResults: boolean } {
   const content: ContentBlock[] = [];
   let hasToolResults = false;
@@ -619,8 +633,19 @@ function processUserMessageParts(
       const block = processImagePart(part, ConversationRole.USER);
       if (block) content.push(block);
     } else if (part instanceof vscode.LanguageModelToolResultPart) {
-      hasToolResults = true;
-      content.push(processToolResultPart(part, profile));
+      if (pendingToolUseIds.delete(part.callId)) {
+        hasToolResults = true;
+        content.push(processToolResultPart(part, profile));
+      } else {
+        const resultText = extractToolResultText(part.content);
+        logger.warn(
+          "[Message Converter] Received tool result without a matching pending tool call; preserving it as user text",
+          { callId: part.callId },
+        );
+        content.push({
+          text: `Tool result for ${part.callId} (no matching tool call in conversation history): ${resultText}`,
+        });
+      }
     } else if (isMetadataPart(part)) {
       logger.trace("[Message Converter] Skipping metadata part in user message:", {
         mimeType: part.mimeType,

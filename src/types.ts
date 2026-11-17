@@ -45,6 +45,16 @@ export interface BedrockModelSummary {
 }
 
 /**
+ * Token budgets and preflight estimate associated with one Bedrock inference call.
+ */
+export interface BedrockTokenCallContext {
+  estimatedInputTokens?: number;
+  inputTokenLimit: number;
+  modelOutputTokenLimit: number;
+  outputTokenLimit: number;
+}
+
+/**
  * A single model entry from https://models.dev/api.json (amazon-bedrock provider).
  * Used to supplement and override hardcoded values in profiles.ts / getModelTokenLimits.
  */
@@ -59,6 +69,12 @@ export interface ModelsDevelopmentEntry {
   cost?: {
     cache_read?: number;
     cache_write?: number;
+    context_over_200k?: {
+      cache_read?: number;
+      cache_write?: number;
+      input?: number;
+      output?: number;
+    };
     input?: number;
     output?: number;
   };
