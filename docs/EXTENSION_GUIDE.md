@@ -1,12 +1,8 @@
 # Amazon Bedrock Provider: Functionality and Configuration
 
-This is the living guide to the extension's current behavior. It documents the repository's
-current implementation and known baseline: the user reports the extension is functional with
-VS Code **1.142.0**. The project has a separately inspected VS Code source checkout at **1.146.0**;
-observations from that newer source are labeled as such and are not assumed to describe 1.142 in
-every detail. See [VS Code and Copilot integration](./VSCODE_INTEGRATION.md) for known UI metadata
-compatibility differences and verification notes. The package manifest currently declares `engines.vscode: ^1.134.0`, which has not
-been reconciled with the 1.142 functional baseline.
+This is the living guide to the extension's current behavior. The model-picker compatibility
+feature targets VS Code **1.146.0** and sets `engines.vscode: ^1.146.0`. See [VS Code and Copilot
+integration](./VSCODE_INTEGRATION.md) for the 1.146 UI metadata contract and verification notes.
 
 The upstream VS Code and GitHub Copilot Chat implementations are external dependencies. This
 extension integrates through VS Code's `LanguageModelChatProvider` API; it does not patch Copilot
@@ -136,15 +132,14 @@ configuration; it does not choose Copilot's prompt policy or alter Copilot's UI 
   supports it, thinking and usage metadata are also emitted. If a requested optional parameter is
   rejected as unknown, the provider can remove that parameter and retry once, with a user-visible
   warning.
-- **No implicit pruning:** the provider does not summarize or prune conversation history. VS Code
-  supplies the messages; Bedrock remains the final authority on whether the request fits a model's
-  context window.
+- **Context compaction:** the provider estimates converted Bedrock message sizes against the selected
+  input budget. If history is over budget, it summarizes older complete turns through a separate
+  request to the selected Bedrock model, preserving the current turn and recent tool interaction.
+  The summary is request-local, is not logged or persisted, and is skipped when history already fits.
 
 The provider validates that converted Bedrock messages are non-empty, begin with a user message,
-and alternate user/assistant roles. It does **not** currently perform a complete pre-request token
-limit rejection based on the token-count estimate. `provideTokenCount` is an estimate used to answer
-Copilot's token-count request; it does not call Bedrock's `CountTokens` operation in the current
-provider flow. Context overflow from Bedrock is translated into actionable user-facing guidance.
+and alternate user/assistant roles. It does not automatically retry an overflow rejected by Bedrock;
+if the current turn or latest tool interaction cannot fit safely, it returns actionable guidance.
 
 ## Model metadata and pricing presentation
 
@@ -152,13 +147,11 @@ The provider attaches standard model identity, limits, capabilities, configurati
 additional picker metadata. The model-specific UI rendering is owned by VS Code/Copilot and differs
 by surface; see [VS Code and Copilot integration](./VSCODE_INTEGRATION.md).
 
-Indicative USD rates come from the bundled models.dev cache. The current implementation passes
-preformatted USD strings into `inputCost`, `outputCost`, and cache-cost metadata via a local type
-widening. VS Code's internal metadata contract treats these fields as numeric Copilot credits per
-million tokens. As a result, a table cell may visually show a dollar string while a related hover
-or details view still labels/interprets it as credits or cannot format it numerically. This is a
-known compatibility/semantics issue, not an AWS billing quote. Do not interpret the display as
-actual Copilot credits or actual AWS charges.
+Indicative AWS USD rates come from the bundled models.dev cache. The extension preserves formatted
+USD strings in `inputCost`, `outputCost`, and cache-cost metadata because the Add Models table
+renders them correctly. VS Code 1.146's picker Details expects numeric Copilot-credit values and may
+show the strings as **Unknown**; the Add Models table remains unchanged. These estimates are not
+Copilot credits, an AWS quote, or actual AWS charges.
 
 Claude Fable 5-family entries receive a retention warning icon and warning text. AWS's account
 retention requirements are controlled by AWS and are not changed by the extension. If Bedrock
@@ -172,24 +165,24 @@ Open the **Amazon Bedrock Models** output channel. The channel uses VS Code's st
 `info` for request lifecycle, `warn` for recoverable issues, and `error` for failures. Trace logging
 can include request structure; review logs before sharing them.
 
-| Symptom                                 | Likely cause and next step                                                                                                                                                             |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No models appear                        | Check credentials, configured region, Bedrock model access, streaming/text output eligibility, and the output log. If listing is denied, enter a known model/profile ID when prompted. |
-| Profile is denied                       | Check IAM permissions and profile availability. Try the regional/global preference appropriate to policy or confirm direct model access.                                               |
-| Data retention error for Fable          | Follow the AWS account-level retention guidance in the error. Ask an AWS administrator if you cannot change that account setting.                                                      |
-| Context window exceeded                 | Start a new chat, reduce history/tool results, reduce local context selection, or choose a model with a larger window. There is no automatic pruning.                                  |
-| No visible response / max tokens        | Reduce conversation history or output-token settings. Reasoning tokens consume output budget even though they are not visible text.                                                    |
-| Tool call rejected                      | Check whether the selected model supports tools and whether the rejected request field is model-specific. The provider may retry once without an unsupported optional parameter.       |
-| Region listing fails in Manage Provider | Enter the AWS region manually and verify the selected identity can access Bedrock there.                                                                                               |
+| Symptom                                 | Likely cause and next step                                                                                                                                                                          |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No models appear                        | Check credentials, configured region, Bedrock model access, streaming/text output eligibility, and the output log. If listing is denied, enter a known model/profile ID when prompted.              |
+| Profile is denied                       | Check IAM permissions and profile availability. Try the regional/global preference appropriate to policy or confirm direct model access.                                                            |
+| Data retention error for Fable          | Follow the AWS account-level retention guidance in the error. Ask an AWS administrator if you cannot change that account setting.                                                                   |
+| Context window exceeded                 | The provider summarizes older turns when its estimate exceeds the selected context. If the latest turn/tool interaction still does not fit, choose a larger context or shorten the current request. |
+| No visible response / max tokens        | Reduce conversation history or output-token settings. Reasoning tokens consume output budget even though they are not visible text.                                                                 |
+| Tool call rejected                      | Check whether the selected model supports tools and whether the rejected request field is model-specific. The provider may retry once without an unsupported optional parameter.                    |
+| Region listing fails in Manage Provider | Enter the AWS region manually and verify the selected identity can access Bedrock there.                                                                                                            |
 
 ## Documentation map
 
 - [Model catalogue](./MODELS.md) — bundled model metadata and price caveats.
 - [Copilot adoption notes](./copilot-adoption.md) — background research, not extension behavior documentation.
-- [VS Code and Copilot integration](./VSCODE_INTEGRATION.md) — provider lifecycle, metadata/UI destinations, API boundaries, and 1.142/1.146 compatibility notes.
+- [VS Code and Copilot integration](./VSCODE_INTEGRATION.md) — provider lifecycle, metadata/UI destinations, API boundaries, and VS Code 1.146 behavior.
 - [Token limits and context management](./TOKEN_LIMITS.md) — detailed token counting, limits, and known VS Code API constraints.
 
 ## Related guide links
 
-- [VS Code and Copilot integration](./VSCODE_INTEGRATION.md) explains how the extension metadata reaches the different VS Code and Copilot Chat UI surfaces, and highlights compatibility notes for the confirmed VS Code 1.142 baseline versus the inspected 1.146 source.
-- [Token limits and context management](./TOKEN_LIMITS.md) documents token estimates, model context limits, reasoning output budgets, and the current lack of automatic history pruning.
+- [VS Code and Copilot integration](./VSCODE_INTEGRATION.md) explains how extension metadata reaches the different VS Code and Copilot Chat UI surfaces, including the verified 1.146 model picker and Add Models behavior.
+- [Token limits and context management](./TOKEN_LIMITS.md) documents token estimates, model context limits, history compaction, and reasoning output budgets.

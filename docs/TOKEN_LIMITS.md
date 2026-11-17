@@ -1,8 +1,8 @@
 # Token Limits and Context Management
 
 This document describes the current extension behavior, not automatic context management supplied by
-Copilot. The user-confirmed functional baseline is VS Code 1.142.0; the extension manifest currently
-allows VS Code 1.134 and newer.
+Copilot. The model-picker compatibility feature targets VS Code 1.146.0 and updates the extension's
+minimum supported version to `^1.146.0`.
 
 ## What the provider advertises
 
@@ -18,16 +18,20 @@ can expose a per-request Context Size selection. It also exposes local prompt-bu
 and 750K when those are smaller than the model's total context and larger than its output allowance.
 
 When a per-request context size is selected, the provider passes the choice as model configuration.
-For non-1M context selections, the provider reduces the local `maxInputTokens` budget for that
-request. When a 1M option is selected for a model requiring an opt-in header, it enables or disables
-the relevant beta header for that turn. A per-request choice takes precedence over the workspace
-1M setting.
+For each supported choice, it computes the effective input budget from the selected total context,
+reserves that model's output limit, and does not exceed the model's supported Bedrock input limit.
+Selecting a context above the standard window enables the model's required extended-context header;
+a lower selection disables that opt-in for the request. A per-request choice takes precedence over
+the workspace 1M setting.
 
 ## Token counting in VS Code / Copilot Chat
 
 The provider implements `provideTokenCount`, which Copilot may call while constructing a request.
 The current implementation returns a local estimate; it does not issue the Bedrock `CountTokens`
-API call.
+API call. At request time, the provider estimates converted Bedrock messages and system content
+against the selected model input budget. If the estimate exceeds that budget, older turns are
+summarized in a separate Bedrock request; the current turn and most recent complete tool interaction
+are retained where they fit. Summarization is skipped when history is already within the limit.
 
 - Text and serialized tool-call/tool-result content use a character-count estimate of roughly
   characters divided by four, adjusted by a model multiplier.
@@ -40,17 +44,17 @@ API call.
   approximations and can differ from model tokenization, hidden prompt content, image processing,
   and Bedrock's accounting.
 
-This estimate is a response to Copilot's token-count request. It is **not** a complete preflight
-check that blocks every oversized request. Bedrock may still reject a request that exceeds the
-selected model's effective limits.
+This estimate is a response to Copilot's token-count request. It is **not** an exact preflight check:
+model tokenization, hidden prompts, and Bedrock accounting can differ, and Bedrock may still reject a
+request that exceeds the selected model's effective limits.
 
 ## Context pruning and retries
 
-The VS Code language-model provider API does not give this extension a hook to ask Copilot Chat to
-prune or summarize the conversation history. The extension receives the messages Copilot provides;
-it does not currently summarize, truncate, or retry with reduced chat history. When Bedrock reports
-a recognized context-window overflow, the provider returns guidance to reduce conversation history,
-remove tool results, or adjust model options.
+The extension cannot ask Copilot Chat to modify its history, but it can compact the converted request
+before sending it to Bedrock. If the estimate exceeds the selected budget, the provider summarizes
+older turns; it does not silently truncate them. The current turn and latest tool interaction are
+preserved where possible. If the latest turn/tool exchange cannot fit or the summary cannot be
+reduced safely, the provider returns actionable guidance without sending an oversized request.
 
 A separate one-time retry exists for a recognized **unknown/unsupported request parameter**. It
 removes the named request field and retries the Bedrock stream once, with a warning part. It does not
@@ -83,13 +87,14 @@ message is emitted for a normal end-of-turn thinking-only response.
 
 When requests exceed context or output limits:
 
-1. Start a new chat or shorten the existing conversation.
+1. Start a new chat or shorten the latest conversation turn if it cannot fit in the selected context.
 2. Remove unnecessary tool output or reduce the number/size of tool results.
-3. Choose a lower local Context Size if the picker offers one.
+3. Choose a larger Context Size if the picker offers one; smaller choices enforce a tighter request
+   budget and may require more history compaction.
 4. Reduce the request output limit if Copilot exposes a `max_tokens` control.
 5. For reasoning-heavy tasks, select a model/effort appropriate to the task and available output
    budget.
 6. If the error persists, check the **Amazon Bedrock Models** output channel and verify the model's
    current AWS context and output limits.
 
-Automatic history pruning and automatic retry with shorter context are not currently implemented.
+The provider summarizes older conversation turns when the estimated history exceeds the selected model input limit. It does not retry oversized requests after Bedrock rejects them.

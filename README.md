@@ -2,33 +2,27 @@
 
 A VSCode extension that brings Amazon Bedrock models into GitHub Copilot Chat using VSCode's official [Language Model Chat Provider API](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider) and the AWS SDK.
 
-\*\*This plugin was forked from [tinovyatkin](https://github.com/tinovyatkin/amazon-bedrock-copilot-chat) and extended to enhance performance and support newer models.
-
-**This is not a hack or workaround** - it's built on two official APIs:
-
-- VSCode's **Language Model Chat Provider API** for integrating custom models into Copilot Chat
-- **AWS SDK for JavaScript** for connecting to Amazon Bedrock
-
-> **Important**: Models provided through the Language Model Chat Provider API are currently only available to users on **individual GitHub Copilot plans**. Organization plans are not yet supported.
+**This plugin was forked from [tinovyatkin](https://github.com/tinovyatkin/amazon-bedrock-copilot-chat) and extended to enhance performance and support newer models.**
 
 ## Features
 
-- **Native Amazon Bedrock Integration**: Access Claude, OpenAI OSS, DeepSeek, and other models directly in GitHub Copilot Chat
-- **Flexible Authentication**: Support for AWS Profiles, API Keys (bearer tokens), or Access Keys - all stored securely
+- **Native Amazon Bedrock Integration**: Discover and use Amazon Bedrock models and inference profiles available to your AWS identity and region
+- **Flexible Authentication**: Use AWS profiles, Bedrock API keys (bearer tokens), or access keys
 - **Streaming Support**: Real-time streaming responses for faster feedback
-- **Function Calling**: Full support for tool/function calling capabilities
+- **Tool Calling**: Available for models that support tool/function calling
 - **Cross-Region Inference**: Automatic support for cross-region inference profiles
-- **Extended Thinking**: Automatic support for extended thinking in Claude Opus 4+, Sonnet 4+, and Sonnet 3.7 for enhanced reasoning on complex tasks. Also respects GitHub Copilot's `github.copilot.chat.anthropic.thinking.enabled` and `github.copilot.chat.anthropic.thinking.maxTokens` settings
-- **Thinking Effort Control**: For Claude Opus 4.5 and Sonnet 4.6, configure thinking effort level (high/medium/low) via `bedrock.thinking.effort` setting to balance quality vs. token usage. Defaults to "high" for maximum capability
-- **1M Context Window**: Optional 1M token context window for Claude Sonnet 4.x and Opus 4.6 models (can be disabled in settings to reduce costs)
-- **Prompt Caching**: Automatic caching of system prompts, tool definitions, and conversation history for faster responses and reduced costs (Claude and Nova models)
-- **Vision Support**: Work with models that support image inputs
+- **Thinking and Reasoning Controls**: Model-specific extended thinking and reasoning options where supported
+- **Selectable Context Size**: Choose from context-size options supported by the selected model, including extended windows (up to 1M where available) and local prompt budgets where applicable
+- **Prompt Caching**: Bedrock prompt caching where supported by the selected model
+- **Image Input**: Work with models that support image inputs
+
+**Harness compatibility:** Context-size selections are currently supported only in the local Copilot harness. VS Code/Copilot's BYOK agent-host integration does not yet forward the selected context size to this extension; broader support is waiting on upstream integration. The extension cannot reliably detect which harness is making a request, so this is a compatibility limitation rather than an automatic harness-specific fallback.
 
 Detailed behavior, configuration, and current limitations are documented in the [extension guide](./docs/EXTENSION_GUIDE.md). See the [VS Code and Copilot integration notes](./docs/VSCODE_INTEGRATION.md) and [token-limit guide](./docs/TOKEN_LIMITS.md) for API/UI interactions and context handling.
 
 ## Prerequisites
 
-- VS Code **1.142.0 is the user-confirmed functional baseline** for the current extension status. The package manifest currently declares `^1.134.0`; earlier versions have not been verified by this guide.
+- VS Code **1.146.0 or newer** (`engines.vscode: ^1.146.0` in the package manifest).
 - GitHub Copilot extension
 - AWS credentials (AWS Profile, API Key, or Access Keys)
 - Access to Amazon Bedrock in your AWS account
@@ -40,10 +34,10 @@ Detailed behavior, configuration, and current limitations are documented in the 
    - See [AWS CLI Configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html) for details
 3. Run the "Manage Amazon Bedrock Provider" command to select your AWS profile and region
 
-Alternatively, install from the `vsix` file:
+Alternatively, install from the VSIX attached to the [latest GitHub release](https://github.com/geertvandeweyer/amazon-bedrock-copilot-chat/releases/latest). The VSIX asset will be available there once it has been uploaded.
 
-1. Download from [github](https://github.com/geertvandeweyer/amazon-bedrock-copilot-chat/releases/download/0.15.1/amazon-bedrock-copilot-chat-0.15.0.vsix)
-2. Open Plugins menu, select the `three dots` and select `Install from VSIX`
+1. Download the `.vsix` asset from the release.
+2. In VS Code, open the Extensions view, select the `...` menu, and choose **Install from VSIX...**
 
 ## Configuration
 
@@ -80,23 +74,26 @@ Once configured, Bedrock models will appear in GitHub Copilot Chat's model selec
 1. Open GitHub Copilot Chat
 2. Click on the model selector
 3. Choose a Bedrock model (they will be labeled with "Amazon Bedrock")
-4. Configure context & reasoning if supported by the model
+4. Configure context size and reasoning options when offered by the selected model (context-size selections currently require the local Copilot harness)
 5. Start chatting!
 
 ## Supported Models
 
-The extension automatically filters and displays only models that:
+Available models depend on your AWS identity, region, permissions, and model access. The extension lists accessible models and inference profiles that support streaming text responses. Tool calling and image input are model-specific capabilities; not every listed model supports them.
 
-- Support **tool calling** (function calling), which is essential for GitHub Copilot Chat features like `@workspace`, `@terminal`, and other integrations
-- Models are **not** filtered on your data retention policy, so calls high-end models might be rejected if `aws_review` policy is not set.
+Context-size choices are also model-specific and appear only when the selected model has multiple supported choices. Depending on the model, choices can include its standard and extended context windows (including 1M where available) and local 256K or 750K prompt budgets. The chosen total context reserves space for model output. The `bedrock.context1M.enabled` setting controls optional extended context where Bedrock requires an opt-in; a per-request context-size selection takes precedence over that setting. See the [token-limit guide](./docs/TOKEN_LIMITS.md) for details.
+
+The context-size selection is currently honored only through the local Copilot harness. The upstream BYOK agent-host path does not yet pass this selection through to the provider; support depends on an upstream integration change. The extension cannot identify the active harness.
 
 ### Models Automatically Excluded
 
-The extension automatically filters models to show only text generation models (using `byOutputModality: "TEXT"` in the Bedrock API). This excludes:
+The extension excludes models that are inaccessible, deprecated/legacy, non-streaming, or do not produce text. This excludes categories such as:
 
 - Embedding models
 - Image generation models
-- **Deprecated models** (models with `LEGACY` lifecycle status)
+- Models marked with a legacy lifecycle status
+
+Image-input support is separate: models that accept images can still be listed when they otherwise meet the discovery requirements. AWS account policies, including data-retention requirements, can still prevent a request; the extension cannot change those policies.
 
 Models are sorted with newest inference profiles first (by creation/update date), making it easier to find recently released models.
 
