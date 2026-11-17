@@ -7,3 +7,4 @@ node_modules
 .eslintcache
 *.log
 *.chatreplay.json
+.env*

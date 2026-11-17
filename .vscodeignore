@@ -21,6 +21,14 @@ bun*
 .github
 docs/
 *.chatreplay.json
+.specify/**
+scripts/**
+specs/**
+internal_docs/**
+.vscode_source/**
+vscode_source
+.ruff_cache/**
+scripts/__pycache__/**
 renovate.json
 !README.md
 !CHANGELOG.md
